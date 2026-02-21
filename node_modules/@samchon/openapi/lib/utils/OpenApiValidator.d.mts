@@ -1,0 +1,17 @@
+import { OpenApi } from "../OpenApi";
+import { IValidation } from "../structures/IValidation";
+export declare namespace OpenApiValidator {
+    const create: (prop: {
+        components: OpenApi.IComponents;
+        schema: OpenApi.IJsonSchema;
+        required: boolean;
+        equals?: boolean;
+    }) => (value: unknown) => IValidation<unknown>;
+    const validate: (props: {
+        components: OpenApi.IComponents;
+        schema: OpenApi.IJsonSchema;
+        value: unknown;
+        required: boolean;
+        equals?: boolean;
+    }) => IValidation<unknown>;
+}

@@ -1,0 +1,22 @@
+class MetadataTuple {
+    type;
+    tags;
+    /** @ignore */
+    constructor(props) {
+        this.type = props.type;
+        this.tags = props.tags;
+    }
+    /** @internal */
+    static create(props) {
+        return new MetadataTuple(props);
+    }
+    toJSON() {
+        return {
+            name: this.type.name,
+            tags: this.tags.map((row) => row.slice()),
+        };
+    }
+}
+
+export { MetadataTuple };
+//# sourceMappingURL=MetadataTuple.mjs.map

@@ -1,0 +1,8 @@
+import { IJsonSchemaAttribute, OpenApi } from "@samchon/openapi";
+import { Metadata } from "../../schemas/metadata/Metadata";
+export declare const json_schema_station: <BlockNever extends boolean>(props: {
+    blockNever: BlockNever;
+    components: OpenApi.IComponents;
+    attribute: IJsonSchemaAttribute;
+    metadata: Metadata;
+}) => BlockNever extends true ? OpenApi.IJsonSchema | null : OpenApi.IJsonSchema;

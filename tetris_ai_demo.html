@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TETRIS AI DEMO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  :root {
+    --bg: #060610; --panel: #0d0d1f; --border: #1a1a3a;
+    --accent: #00f5ff; --accent2: #ff006e; --accent3: #7fff00;
+    --text: #c8d8ff; --dim: #3a3a5a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; overflow: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none;
+  }
+  h1 {
+    font-family: 'Orbitron', monospace; font-weight: 900;
+    font-size: 1.4rem; letter-spacing: 0.3em; color: var(--accent);
+    text-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent);
+    margin-bottom: 20px; text-align: center;
+  }
+  h1 span { color: var(--accent2); text-shadow: 0 0 20px var(--accent2); }
+  .game-wrap { display: flex; gap: 16px; align-items: flex-start; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; width: 120px;
+  }
+  .panel-title {
+    font-size: 0.65rem; color: var(--accent); letter-spacing: 0.2em;
+    margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .stat-label { font-size: 0.6rem; color: var(--dim); letter-spacing: 0.1em; margin-top: 10px; }
+  .stat-value { font-size: 1.1rem; color: var(--accent3); text-shadow: 0 0 10px var(--accent3); }
+  .mode-badge {
+    display: inline-block; padding: 3px 8px; border-radius: 4px;
+    font-size: 0.65rem; letter-spacing: 0.1em; margin-top: 6px; font-weight: bold;
+  }
+  .mode-safe { background: #1a3a1a; color: #34d399; border: 1px solid #34d399; }
+  .mode-straight { background: #2a2a1a; color: #fbbf24; border: 1px solid #fbbf24; }
+  .mode-cheese { background: #3a2010; color: #f97316; border: 1px solid #f97316; }
+  .mode-danger { background: #3a1a1a; color: #f87171; border: 1px solid #f87171; }
+  .last-action { font-size: 0.7rem; color: var(--accent2); text-shadow: 0 0 8px var(--accent2); margin-top: 6px; min-height: 18px; }
+  .board-wrap {
+    position: relative; border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; box-shadow: 0 0 30px rgba(0,245,255,0.1), inset 0 0 30px rgba(0,0,0,0.5);
+  }
+  canvas { display: block; }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(6,6,16,0.85); backdrop-filter: blur(4px);
+  }
+  .overlay h2 {
+    font-family: 'Orbitron', monospace; font-size: 1.2rem;
+    color: var(--accent); text-shadow: 0 0 20px var(--accent); margin-bottom: 16px;
+  }
+  .btn {
+    font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
+    letter-spacing: 0.2em; padding: 10px 28px; background: transparent;
+    border: 1px solid var(--accent); color: var(--accent); border-radius: 4px;
+    cursor: pointer; transition: all 0.2s; margin: 4px;
+  }
+  .btn:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 20px var(--accent); }
+  .btn.danger { border-color: var(--accent2); color: var(--accent2); }
+  .btn.danger:hover { background: var(--accent2); color: white; box-shadow: 0 0 20px var(--accent2); }
+  .speed-wrap { margin-top: 12px; text-align: center; }
+  .speed-wrap label { font-size: 0.65rem; color: var(--dim); letter-spacing: 0.1em; display: block; margin-bottom: 4px; }
+  .speed-wrap input { width: 100%; accent-color: var(--accent); }
+  .speed-val { font-size: 0.75rem; color: var(--accent3); }
+  .b2b-counter { font-size: 0.65rem; color: var(--dim); margin-top: 4px; }
+  .b2b-counter span { color: #ff006e; font-size: 0.9rem; text-shadow: 0 0 8px #ff006e; }
+</style>
+</head>
+<body>
+<h1>TETRIS <span>AI</span> DEMO</h1>
+<div class="game-wrap">
+  <div class="panel">
+    <div class="panel-title">HOLD</div>
+    <canvas id="holdCanvas" width="72" height="54"></canvas>
+    <div class="stat-label">SCORE</div>
+    <div class="stat-value" id="score">0</div>
+    <div class="stat-label">LINES</div>
+    <div class="stat-value" id="lines">0</div>
+    <div class="stat-label">MODE</div>
+    <div class="mode-badge mode-safe" id="modeDisplay">SAFE</div>
+    <div class="last-action" id="lastAction"></div>
+    <div class="b2b-counter">B2B: <span id="b2bCount">0</span></div>
+    <div class="speed-wrap">
+      <label>SPEED</label>
+      <input type="range" id="speedSlider" min="1" max="10" value="3">
+      <div class="speed-val" id="speedVal">3x</div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="gameCanvas" width="280" height="560"></canvas>
+    <div class="overlay" id="overlay">
+      <h2>TETRIS AI</h2>
+      <button class="btn" onclick="startGame()">▶ AI START</button>
+      <button class="btn danger" onclick="startGame(true)">⚡ CHAOS MODE</button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">NEXT</div>
+    <canvas id="nextCanvas" width="72" height="270"></canvas>
+    <div class="stat-label">PIECES</div>
+    <div class="stat-value" id="pieces">0</div>
+    <div class="stat-label">PPS</div>
+    <div class="stat-value" id="pps">0.0</div>
+    <div style="margin-top:12px;">
+      <button class="btn" style="width:100%;font-size:0.7rem;padding:6px;" onclick="pauseGame()">⏸ PAUSE</button>
+      <button class="btn danger" style="width:100%;font-size:0.7rem;padding:6px;margin-top:4px;" onclick="resetGame()">↺ RESET</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PIECE_TYPES = ['I','O','T','S','Z','J','L'];
+const PIECES = {
+  I: { rotations: [[[1,1,1,1]],[[1],[1],[1],[1]]], color: '#00f5ff' },
+  O: { rotations: [[[1,1],[1,1]]], color: '#ffe600' },
+  T: { rotations: [[[0,1,0],[1,1,1]],[[1,0],[1,1],[1,0]],[[1,1,1],[0,1,0]],[[0,1],[1,1],[0,1]]], color: '#bf00ff' },
+  S: { rotations: [[[0,1,1],[1,1,0]],[[1,0],[1,1],[0,1]]], color: '#7fff00' },
+  Z: { rotations: [[[1,1,0],[0,1,1]],[[0,1],[1,1],[1,0]]], color: '#ff006e' },
+  J: { rotations: [[[1,0,0],[1,1,1]],[[1,1],[1,0],[1,0]],[[1,1,1],[0,0,1]],[[0,1],[0,1],[1,1]]], color: '#0066ff' },
+  L: { rotations: [[[0,0,1],[1,1,1]],[[1,0],[1,0],[1,1]],[[1,1,1],[1,0,0]],[[1,1],[0,1],[0,1]]], color: '#ff8800' }
+};
+const CELL = 28;
+// Lookahead 가중치: 깊이가 깊을수록 할인하지만 여전히 영향력 있게
+const LOOKAHEAD_WEIGHTS = [1.0, 0.85, 0.65, 0.45, 0.3, 0.2, 0.15, 0.1, 0.08, 0.05];
+
+let board, currentPiece, currentRot, currentCol, currentRow;
+let nextQueue, holdPiece, canHold;
+let score, lines, pieces, b2b, b2bCount;
+let gameRunning, gamePaused, gameOver;
+let aiTimeout, speed = 3, startTime, chaosMode = false;
+let bag = [];
+
+// 7-bag
+function randomPiece() {
+  if (bag.length === 0) {
+    bag = [...PIECE_TYPES];
+    for (let i = bag.length-1; i > 0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [bag[i],bag[j]] = [bag[j],bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+function initGame() {
+  board = Array.from({length:20}, () => new Array(10).fill(null));
+  bag = []; nextQueue = [];
+  for (let i = 0; i < 10; i++) nextQueue.push(randomPiece());
+  holdPiece = null; canHold = true;
+  score = 0; lines = 0; pieces = 0;
+  b2b = false; b2bCount = 0;
+  gameRunning = false; gamePaused = false; gameOver = false;
+  startTime = Date.now();
+  updateStats(); drawBoard(); drawHold(); drawNext();
+}
+
+function startGame(chaos = false) {
+  try {
+    chaosMode = chaos;
+    document.getElementById('overlay').style.display = 'none';
+    initGame(); 
+    gameRunning = true; 
+    startTime = Date.now();
+    if (chaosMode) spawnGarbage(4);
+    spawnPiece(); 
+    scheduleAI();
+  } catch(e) {
+    console.error('startGame error:', e);
+    alert('게임 시작 에러: ' + e.message);
+  }
+}
+
+function pauseGame() {
+  if (!gameRunning) return;
+  gamePaused = !gamePaused;
+  if (!gamePaused) scheduleAI();
+}
+
+function resetGame() {
+  clearTimeout(aiTimeout); initGame();
+  document.getElementById('overlay').style.display = 'flex';
+  document.getElementById('overlay').innerHTML = `
+    <h2>RESET</h2>
+    <button class="btn" onclick="startGame()">▶ AI START</button>
+    <button class="btn danger" onclick="startGame(true)">⚡ CHAOS MODE</button>`;
+}
+
+function spawnPiece() {
+  const type = nextQueue.shift();
+  nextQueue.push(randomPiece());
+  currentPiece = type; currentRot = 0; currentCol = 3; currentRow = 0;
+  canHold = true; pieces++;
+  if (chaosMode && pieces%8===0) spawnGarbage(2);
+  if (!canPlace(board, getPieceMatrix(), 0, 3)) { endGame(); return; }
+  drawAll();
+}
+
+function getPieceMatrix(type, rot) {
+  return PIECES[type||currentPiece].rotations[rot!==undefined?rot:currentRot];
+}
+
+// 보드 로직
+function canPlace(b, piece, row, col) {
+  for (let r = 0; r < piece.length; r++)
+    for (let c = 0; c < piece[r].length; c++) {
+      if (!piece[r][c]) continue;
+      const nr=row+r, nc=col+c;
+      if (nr<0||nr>=20||nc<0||nc>=10||b[nr][nc]) return false;
+    }
+  return true;
+}
+
+function dropRowOn(b, piece, col) {
+  let row = 0;
+  while (row+1 < 20 && canPlace(b, piece, row+1, col)) row++;
+  return canPlace(b, piece, row, col) ? row : -1;
+}
+
+function dropRow(piece, col) { return dropRowOn(board, piece, col); }
+
+function placePiece(b, piece, row, col, color) {
+  const nb = b.map(r=>[...r]);
+  for (let r=0;r<piece.length;r++)
+    for (let c=0;c<piece[r].length;c++)
+      if (piece[r][c]) nb[row+r][col+c] = color;
+  return nb;
+}
+
+function clearLines(b) {
+  const nb = b.filter(row=>row.some(c=>!c));
+  const cleared = 20-nb.length;
+  while (nb.length<20) nb.unshift(new Array(10).fill(null));
+  return {board:nb, cleared};
+}
+
+function spawnGarbage(count) {
+  const gapCol = Math.floor(Math.random()*10);
+  for (let i=0;i<count;i++) {
+    board.shift();
+    const row = new Array(10).fill('#333355');
+    row[gapCol] = null; board.push(row);
+  }
+}
+
+// 보드 분석
+function getHeights(b) {
+  return Array.from({length:10},(_,col)=>{
+    for (let row=0;row<20;row++) if (b[row][col]) return 20-row;
+    return 0;
+  });
+}
+
+function countHoles(b, heights) {
+  let holes = 0;
+  for (let col=0;col<10;col++) {
+    const start = 20-heights[col];
+    for (let row=start;row<20;row++) if (!b[row][col]) holes++;
+  }
+  return holes;
+}
+
+function getBumpiness(heights) {
+  let bump = 0;
+  for (let i=0;i<9;i++) bump += Math.abs(heights[i]-heights[i+1]);
+  return bump;
+}
+
+function detectGarbage(b) {
+  const gRows = [];
+  for (let row=19;row>=0;row--)
+    if (b[row].some(c=>c==='#333355')) gRows.push(b[row]);
+  if (!gRows.length) return 'none';
+  const holeCols = gRows.map(r=>r.indexOf(null));
+  return new Set(holeCols).size >= 3 ? 'cheese' : 'straight';
+}
+
+function detectMode(b) {
+  const h = getHeights(b);
+  const maxH = Math.max(...h);
+  const holes = countHoles(b, h);
+  const g = detectGarbage(b);
+  if (maxH>=15||holes>=6) return 'danger';
+  if (g==='cheese') return 'cheese';
+  if (g==='straight') return 'straight';
+  return 'safe';
+}
+
+// T-Spin 감지 (간단한 버전)
+function detectTSpin(b, piece, row, col, rot) {
+  // 간단한 T-Spin 감지: 현재는 스킵
+  // 복잡한 로직으로 인한 에러 방지
+  return 'none';
+}
+
+function detectTSpinSetup(b) {
+  const heights = getHeights(b);
+  for (let col=1;col<8;col++) {
+    const h = heights[col];
+    if (h<2) continue;
+    const row = 20-h;
+    try {
+      const leftWall = col===0||b[row]?.[col-1];
+      const rightWall = col>=9||b[row]?.[col+2];
+      const topLeft = !b[row]?.[col]&&!b[row+1]?.[col];
+      const topRight = !b[row]?.[col+1]&&!b[row+1]?.[col+1];
+      const bottom = b[row+2]?.[col]&&b[row+2]?.[col+1];
+      if (leftWall&&rightWall&&topLeft&&topRight&&bottom) return 'tsd';
+    } catch(e) {}
+    try {
+      const tst = !b[row]?.[col]&&!b[row+1]?.[col]&&!b[row+2]?.[col]
+        &&b[row+1]?.[col-1]&&b[row+1]?.[col+1];
+      if (tst) return 'tst';
+    } catch(e) {}
+  }
+  return 'none';
+}
+
+// 점수 계산
+function evaluateBoard(b, action, isB2B, mode) {
+  const heights = getHeights(b);
+  const holes = countHoles(b, heights);
+  const bump = getBumpiness(heights);
+  const maxH = Math.max(...heights);
+  let s = 0;
+
+  s -= holes*100; s -= maxH*5; s -= bump*3;
+
+  // 퍼펙트 클리어 점수 (T-Spin이 아닌 경우만 가능)
+  if (action==='tetris_pc') s+=15000;  // Tetris + PC
+  else if (action==='triple_pc') s+=10500; // Triple + PC
+  else if (action==='double_pc') s+=10300; // Double + PC
+  else if (action==='single_pc') s+=10100; // Single + PC
+  else if (action==='pc') s+=10000;   // 순수 PC (라인 없음)
+  // T-Spin 점수 (PC와 독립)
+  else if (action==='tsd') s+=5500;   // T-Spin Double (황금 배치)
+  else if (action==='tsf') s+=3500;   // T-Spin Fin
+  else if (action==='tss') s+=4000;   // T-Spin Single
+  else if (action==='tst') s+=4200;   // T-Spin Triple
+  else if (action==='tsm') s+=1500;   // T-Spin Mini
+  else if (action==='tetris') s+=2000;
+
+  if (isB2B) { s+=500; if (action==='tsd') s+=1000; } // TSD 연속 보너스
+
+  if (mode==='safe'&&(action==='tsd')) s+=500;
+  if (mode==='cheese') {
+    if (action==='tetris'||action==='tetris_pc') s+=3000;
+    if (['single','double','triple'].includes(action)) s+=500;
+  }
+  if (mode==='straight'&&(action==='tetris'||action==='tetris_pc'||action==='tsd')) s+=1000;
+  if (mode==='danger') {
+    if (action==='tsd') s+=5000;
+    if (action==='tst') s+=4000;
+    if (action==='tetris'||action==='tetris_pc') s+=3500;
+    if (action==='single') s-=5000;
+    s+=1000;
+  }
+
+  if (isB2B&&['single','double','triple'].includes(action))
+    if (mode!=='cheese'&&mode!=='danger') s-=3000;
+
+  const setup = detectTSpinSetup(b);
+  if (setup==='tsd') s+=2000;
+  if (setup==='tst') s+=1500;
+
+  return s;
+}
+
+// 액션 판단
+function getAction(clearedBoard, placed, piece, row, col, rot, type, n) {
+  let action = 'none';
+  
+  // 1. 퍼펙트 클리어 감지
+  const isPC = clearedBoard.every(r=>r.every(c=>!c));
+  
+  // 2. T-Spin 감지 시도 (안전하게)
+  if (type==='T') {
+    try {
+      const ts = detectTSpin(placed, piece, row, col, rot);
+      if (ts==='full') {
+        if (n===3) action='tst';
+        else if (n===2) action='tsd';
+        else if (n===1) action='tss';
+      } else if (ts==='mini'&&n===1) {
+        action='tsm';
+      }
+    } catch(e) {
+      console.warn('T-Spin detection error:', e);
+      // T-Spin 감지 실패 시 일반 클리어로 처리
+      action = 'none';
+    }
+  }
+  
+  // 3. T-Spin이 감지되지 않은 경우만 일반 클리어 및 PC 고려
+  if (action === 'none') {
+    if (isPC && n === 4) action = 'tetris_pc';
+    else if (isPC && n === 3) action = 'triple_pc';
+    else if (isPC && n === 2) action = 'double_pc';
+    else if (isPC && n === 1) action = 'single_pc';
+    else if (isPC) action = 'pc';
+    else if (n === 4) action = 'tetris';
+    else if (n === 3) action = 'triple';
+    else if (n === 2) action = 'double';
+    else if (n === 1) action = 'single';
+  }
+  
+  return action;
+}
+
+// 후보 추리기
+function getCandidates(b, type, mode) {
+  try {
+    const rotations = PIECES[type].rotations;
+    const candidates = [];
+    const heights = getHeights(b);
+    const maxH = Math.max(...heights);
+
+    for (let rot=0;rot<rotations.length;rot++) {
+      const piece = rotations[rot];
+      for (let col=0;col<=10-piece[0].length;col++) {
+        const row = dropRowOn(b, piece, col);
+        if (row<0) continue;
+
+        const placed = placePiece(b, piece, row, col, PIECES[type].color);
+        const {board:cleared, cleared:n} = clearLines(placed);
+        const action = getAction(cleared, placed, piece, row, col, rot, type, n);
+        const newH = Math.max(...getHeights(cleared));
+        const newHoles = countHoles(cleared, getHeights(cleared));
+        const isTSpin = ['tsd','tst','tss','tsf','tsm'].includes(action);
+        const isTetris = ['tetris','tetris_pc'].includes(action);
+        const isPC = ['pc','tetris_pc','single_pc','double_pc','triple_pc'].includes(action);
+        const setup = detectTSpinSetup(cleared);
+
+        const isAttack = isTSpin||isTetris||isPC;
+        const isSurvival = newH<=maxH+2||newHoles<=2;
+        const isSetup = setup!=='none';
+
+        let include = isAttack;
+        if (mode==='danger'||mode==='cheese') include = include||isSurvival;
+        else include = include||isSetup||isSurvival;
+
+        if (include) candidates.push({rot, col, action, board:cleared});
+      }
+    }
+
+    if (candidates.length === 0) {
+      for (let rot=0;rot<PIECES[type].rotations.length;rot++) {
+        const piece = PIECES[type].rotations[rot];
+        for (let col=0;col<=10-piece[0].length;col++) {
+          const row = dropRowOn(b, piece, col);
+          if (row<0) continue;
+          const placed = placePiece(b, piece, row, col, PIECES[type].color);
+          const {board:cleared, cleared:n} = clearLines(placed);
+          const action = getAction(cleared, placed, piece, row, col, rot, type, n);
+          candidates.push({rot, col, action, board:cleared});
+        }
+      }
+    }
+    return candidates;
+  } catch(e) {
+    console.error('getCandidates error:', e, 'type:', type);
+    return [];
+  }
+}
+
+// Next 10 룩어헤드
+// Setup 감지: 다음 배치가 T-Spin/PC를 만들 가능성 평가 (0~1 범위)
+function detectSetupBonus(b, mode) {
+  const heights = getHeights(b);
+  const maxH = Math.max(...heights);
+  const holes = countHoles(b, heights);
+  const isEmpty = b.every(r => r.every(c => !c));
+  
+  // PC 가능성: 빈 공간이 많으면 PC 확률 높음
+  const emptyCount = b.flat().filter(c => !c).length;
+  const pcScore = isEmpty ? 1.0 : (emptyCount > 12 ? 0.8 : emptyCount > 8 ? 0.5 : emptyCount > 4 ? 0.3 : 0.1);
+  
+  // T-Spin Setup 가능성: 특정 구멍 패턴이 있으면 T-Spin 조건 형성중
+  const tspinScore = (holes >= 3 && holes <= 8 && maxH >= 5 && maxH <= 18) ? 0.6 : 0;
+  
+  return Math.max(pcScore, tspinScore);
+}
+
+function lookahead(b, isB2B, mode, depth) {
+  if (depth >= 5 || !nextQueue[depth]) return 0; // depth 5까지 탐색 (더 깊이 봄)
+  const nextType = nextQueue[depth];
+  if (!nextType) return 0;
+  
+  try {
+    const currentMode = detectMode(b);
+    const candidates = getCandidates(b, nextType, currentMode);
+    if (candidates.length === 0) return 0;
+    
+    let bestScore = -Infinity;
+    for (const cand of candidates) {
+      // 액션에 따른 새로운 B2B 상태 계산
+      const isTSpin = ['tsd','tst','tss','tsf','tsm'].includes(cand.action);
+      const isTetris = cand.action==='tetris'||cand.action==='tetris_pc';
+      const isPC = ['pc','tetris_pc','single_pc','double_pc','triple_pc'].includes(cand.action);
+      const newB2B = (isB2B && (isTSpin || isTetris || isPC)) ? true : 
+                     (isTSpin || isTetris || isPC) ? true : false;
+      
+      let sc = evaluateBoard(cand.board, cand.action, newB2B, currentMode);
+      // Setup bonus: 다음 조각이 T-Spin이나 PC를 만들 수 있는 기회 평가
+      const setupScore = detectSetupBonus(cand.board, currentMode);
+      sc += setupScore * (depth === 0 ? 1500 : 800);
+      sc += lookahead(cand.board, newB2B, currentMode, depth+1);
+      if (sc > bestScore) bestScore = sc;
+    }
+    return bestScore * LOOKAHEAD_WEIGHTS[depth];
+  } catch(e) {
+    console.error('Lookahead error at depth', depth, ':', e);
+    return 0;
+  }
+}
+
+function findBestMove(type, isB2B, mode) {
+  try {
+    const candidates = getCandidates(board, type, mode);
+    let best = -Infinity, bestMove = null;
+    for (const cand of candidates) {
+      // 액션에 따른 새로운 B2B 상태 계산
+      const isTSpin = ['tsd','tst','tss','tsf','tsm'].includes(cand.action);
+      const isTetris = cand.action==='tetris'||cand.action==='tetris_pc';
+      const isPC = ['pc','tetris_pc','single_pc','double_pc','triple_pc'].includes(cand.action);
+      const newB2B = (isB2B && (isTSpin || isTetris || isPC)) ? true : 
+                     (isTSpin || isTetris || isPC) ? true : false;
+      
+      let sc = evaluateBoard(cand.board, cand.action, newB2B, mode);
+      sc += lookahead(cand.board, newB2B, mode, 0);
+      if (sc>best) { best=sc; bestMove={rot:cand.rot, col:cand.col, action:cand.action}; }
+    }
+    return bestMove;
+  } catch(e) {
+    console.error('findBestMove error:', e);
+    return null;
+  }
+}
+
+// AI 실행
+function scheduleAI() {
+  if (!gameRunning||gamePaused||gameOver) return;
+  // 지수 함수로 극적인 속도 차이 생성
+  // speed=1: 2000ms, speed=3: 222ms, speed=5: 80ms, speed=10: 20ms
+  const delay = Math.max(15, 2000 / (speed * speed));
+  aiTimeout = setTimeout(() => {
+    try {
+      aiStep();
+    } catch(e) {
+      console.error('aiTimeout error:', e);
+      endGame();
+    }
+  }, delay);
+}
+
+function aiStep() {
+  if (!gameRunning||gamePaused||gameOver) return;
+  try {
+    const mode = detectMode(board);
+    updateModeDisplay(mode);
+    const move = findBestMove(currentPiece, b2b, mode);
+    if (!move) { endGame(); return; }
+
+    currentRot=move.rot; currentCol=move.col;
+    currentRow = dropRow(getPieceMatrix(), currentCol);
+    if (currentRow<0) { endGame(); return; }
+
+    board = placePiece(board, getPieceMatrix(), currentRow, currentCol, PIECES[currentPiece].color);
+    const {board:nb, cleared} = clearLines(board);
+    board = nb;
+
+    updateScore(move.action, cleared);
+    document.getElementById('lastAction').textContent = formatAction(move.action);
+    spawnPiece(); updateStats(); drawAll(); scheduleAI();
+  } catch(e) {
+    console.error('AI Error:', e);
+    endGame();
+  }
+}
+
+function updateScore(action, cleared) {
+  const isTSpin = ['tsd','tst','tss','tsf','tsm'].includes(action);
+  const isTetris = action==='tetris'||action==='tetris_pc';
+  if (isTSpin||isTetris) { b2b=true; b2bCount++; }
+  else if (cleared>0&&!['pc','tetris_pc'].includes(action)) { b2b=false; b2bCount=0; }
+  const base = [0,100,300,500,800];
+  score += (base[cleared]||0)*(b2b?1.5:1);
+  if (['pc','tetris_pc'].includes(action)) score+=1000;
+  lines+=cleared;
+  document.getElementById('b2bCount').textContent = b2bCount;
+}
+
+function formatAction(action) {
+  const map = {
+    // 퍼펙트 클리어 (T-Spin이 아닌 경우만 가능)
+    tetris_pc:'★ TETRIS PC!', 
+    triple_pc:'★ TRIPLE PC!',
+    double_pc:'★ DOUBLE PC!',
+    single_pc:'★ SINGLE PC!',
+    pc:'★ PERFECT CLEAR!',
+    // T-Spin (PC와 독립)
+    tsd:'⚡ T-SPIN DOUBLE', 
+    tst:'🔺 T-SPIN TRIPLE',
+    tss:'· T-SPIN SINGLE', 
+    tsf:'✨ T-SPIN FIN',
+    tsm:'· T-SPIN MINI', 
+    // 일반 클리어
+    tetris:'▣ TETRIS',
+    triple:'TRIPLE', 
+    double:'DOUBLE', 
+    single:'single'
+  };
+  return map[action]||'';
+}
+
+function updateModeDisplay(mode) {
+  const el = document.getElementById('modeDisplay');
+  el.className='mode-badge mode-'+mode;
+  el.textContent=mode.toUpperCase();
+}
+
+function updateStats() {
+  document.getElementById('score').textContent = score.toLocaleString();
+  document.getElementById('lines').textContent = lines;
+  document.getElementById('pieces').textContent = pieces;
+  const elapsed = (Date.now()-startTime)/1000;
+  document.getElementById('pps').textContent = (pieces/Math.max(elapsed,1)).toFixed(1);
+}
+
+// 렌더링
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const holdCanvas = document.getElementById('holdCanvas');
+const holdCtx = holdCanvas.getContext('2d');
+const nextCanvas = document.getElementById('nextCanvas');
+const nextCtx = nextCanvas.getContext('2d');
+
+function drawAll() { drawBoard(); drawHold(); drawNext(); }
+
+function drawCell(ctx, x, y, color, size) {
+  ctx.fillStyle=color; ctx.fillRect(x+1,y+1,size-2,size-2);
+  ctx.fillStyle='rgba(255,255,255,0.25)';
+  ctx.fillRect(x+1,y+1,size-2,3); ctx.fillRect(x+1,y+1,3,size-2);
+  ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.fillRect(x+1,y+size-4,size-2,3);
+}
+
+function drawBoard() {
+  ctx.fillStyle='#060610'; ctx.fillRect(0,0,280,560);
+  ctx.strokeStyle='rgba(26,26,58,0.5)'; ctx.lineWidth=0.5;
+  for (let r=0;r<20;r++) for (let c=0;c<10;c++) ctx.strokeRect(c*CELL,r*CELL,CELL,CELL);
+  for (let r=0;r<20;r++)
+    for (let c=0;c<10;c++)
+      if (board[r][c]) drawCell(ctx,c*CELL,r*CELL,board[r][c],CELL);
+
+  if (gameRunning&&!gameOver) {
+    const piece=getPieceMatrix();
+    const ghostRow=dropRow(piece,currentCol);
+    if (ghostRow>=0)
+      for (let r=0;r<piece.length;r++)
+        for (let c=0;c<piece[r].length;c++)
+          if (piece[r][c]) {
+            ctx.fillStyle='rgba(255,255,255,0.08)';
+            ctx.fillRect((currentCol+c)*CELL+1,(ghostRow+r)*CELL+1,CELL-2,CELL-2);
+          }
+    const color=PIECES[currentPiece].color;
+    for (let r=0;r<piece.length;r++)
+      for (let c=0;c<piece[r].length;c++)
+        if (piece[r][c]) drawCell(ctx,(currentCol+c)*CELL,(currentRow+r)*CELL,color,CELL);
+  }
+}
+
+function drawMini(ctx, type, canvasW, offsetY, cellSize) {
+  if (!type) return;
+  const piece=PIECES[type].rotations[0]; const color=PIECES[type].color;
+  const pw=piece[0].length*cellSize, ph=piece.length*cellSize;
+  const sx=(canvasW-pw)/2, sy=offsetY+(cellSize*2-ph)/2;
+  for (let r=0;r<piece.length;r++)
+    for (let c=0;c<piece[r].length;c++)
+      if (piece[r][c]) drawCell(ctx,sx+c*cellSize,sy+r*cellSize,color,cellSize);
+}
+
+function drawHold() {
+  holdCtx.fillStyle='#0d0d1f'; holdCtx.fillRect(0,0,72,54);
+  if (holdPiece) drawMini(holdCtx,holdPiece,72,0,14);
+}
+
+function drawNext() {
+  nextCtx.fillStyle='#0d0d1f'; nextCtx.fillRect(0,0,72,270);
+  for (let i=0;i<Math.min(5,nextQueue.length);i++)
+    drawMini(nextCtx,nextQueue[i],72,i*54,13);
+}
+
+function endGame() {
+  gameOver=true; gameRunning=false; clearTimeout(aiTimeout);
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('overlay').innerHTML=`
+    <h2>GAME OVER</h2>
+    <div style="color:#aaa;font-size:0.8rem;margin-bottom:12px;">SCORE: ${score.toLocaleString()} | LINES: ${lines}</div>
+    <button class="btn" onclick="startGame()">▶ RETRY</button>
+    <button class="btn danger" onclick="startGame(true)">⚡ CHAOS MODE</button>`;
+}
+
+document.getElementById('speedSlider').addEventListener('input', function() {
+  speed=parseInt(this.value);
+  document.getElementById('speedVal').textContent=speed+'x';
+});
+
+initGame();
+</script>
+</body>
+</html>

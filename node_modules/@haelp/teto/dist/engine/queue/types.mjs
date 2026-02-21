@@ -1,0 +1,14 @@
+export var Mino = /*#__PURE__*/ function(Mino) {
+    Mino["I"] = "i";
+    Mino["J"] = "j";
+    Mino["L"] = "l";
+    Mino["O"] = "o";
+    Mino["S"] = "s";
+    Mino["T"] = "t";
+    Mino["Z"] = "z";
+    Mino["GARBAGE"] = "gb";
+    Mino["BOMB"] = "bomb";
+    return Mino;
+}({});
+
+//# sourceMappingURL=types.js.map

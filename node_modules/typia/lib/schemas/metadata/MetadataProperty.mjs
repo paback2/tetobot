@@ -1,0 +1,47 @@
+import { Metadata } from './Metadata.mjs';
+
+class MetadataProperty {
+    key;
+    value;
+    description;
+    jsDocTags;
+    mutability;
+    of_protobuf_;
+    /* -----------------------------------------------------------
+          CONSTRUCTORS
+      ----------------------------------------------------------- */
+    /** @ignore */
+    constructor(props) {
+        this.key = props.key;
+        this.value = props.value;
+        this.description = props.description;
+        this.jsDocTags = props.jsDocTags;
+        this.mutability = props.mutability;
+    }
+    /** @internal */
+    static create(props) {
+        return new MetadataProperty(props);
+    }
+    /** @internal */
+    static from(property, dict) {
+        return MetadataProperty.create({
+            key: Metadata.from(property.key, dict),
+            value: Metadata.from(property.value, dict),
+            description: property.description,
+            jsDocTags: property.jsDocTags.slice(),
+            mutability: property.mutability,
+        });
+    }
+    toJSON() {
+        return {
+            key: this.key.toJSON(),
+            value: this.value.toJSON(),
+            description: this.description,
+            jsDocTags: this.jsDocTags,
+            mutability: this.mutability,
+        };
+    }
+}
+
+export { MetadataProperty };
+//# sourceMappingURL=MetadataProperty.mjs.map

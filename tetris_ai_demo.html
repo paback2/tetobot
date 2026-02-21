@@ -407,12 +407,12 @@ function findBestMove(board, pieces, isB2B, mode) {
     const result = findBestMoveRecursive(board, lookaheadPieces, isB2B, mode);
     if (!result || !result.move) {
         const fallbackMoves = _findMovesForPiece(board, pieces[0], isB2B, mode);
-        if (fallbackMoves.length === 0) return null;
+        if (fallbackMoves.length === 0) return { move: null, score: -Infinity };
         fallbackMoves.sort((a, b) => b.score - a.score);
         const fallbackMove = fallbackMoves[0];
-        return { ...fallbackMove.move, action: fallbackMove.action };
+        return { move: { ...fallbackMove.move, action: fallbackMove.action }, score: fallbackMove.score };
     }
-    return { ...result.move, action: result.action };
+    return { move: { ...result.move, action: result.action }, score: result.score };
 }
 
 

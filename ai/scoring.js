@@ -1,17 +1,127 @@
 import { getColumnHeights, countHoles, getBumpiness } from '../game/board.js';
 
-// 모드별 점수 계산
-export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
+/**
+ * 상세한 보드 분석 메트릭 계산
+ * @param {number[][]} board - 게임 보드
+ * @returns {Object} 보드 분석 결과
+ */
+function analyzeBoard(board) {
   const heights = getColumnHeights(board);
   const holes = countHoles(board, heights);
   const bumpiness = getBumpiness(heights);
   const maxHeight = Math.max(...heights);
-  let score = 0;
+  const minHeight = Math.min(...heights);
+  
+  // 평균 높이
+  const avgHeight = heights.reduce((a, b) => a + b, 0) / heights.length;
+  
+  // 깊은 구멍 개수 (3칸 이상 깊이)
+  let deepHoles = 0;
+  for (let col = 0; col < 10; col++) {
+    const startRow = 20 - heights[col];
+    let holeDepth = 0;
+    for (let row = startRow; row < 20; row++) {
+      if (board[row][col] === 0) {
+        holeDepth++;
+      } else {
+        if (holeDepth >= 3) deepHoles++;
+        holeDepth = 0;
+      }
+    }
+    if (holeDepth >= 3) deepHoles++;
+  }
+  
+  // 행 채움도 분석 (클리어 가능성)
+  let nearFullRows = 0;
+  for (let row = 19; row >= Math.max(19 - maxHeight, 0); row--) {
+    const filledCells = board[row].filter(cell => cell !== 0).length;
+    if (filledCells >= 8) nearFullRows++; // 8칸 이상 차있는 행
+  }
+  
+  // 우물 잠재력 (I-피스 배치 가능한 우물)
+  let wellPotential = 0;
+  for (let col = 0; col < 10; col++) {
+    const leftWall = col === 0 || heights[col - 1] > heights[col];
+    const rightWall = col === 9 || heights[col + 1] > heights[col];
+    if (leftWall && rightWall && heights[col] < 18) {
+      wellPotential += (18 - heights[col]); // 우물 깊이
+    }
+  }
+  
+  // 높이 분산도 (불균형 정도)
+  let variance = 0;
+  for (let h of heights) {
+    variance += Math.pow(h - avgHeight, 2);
+  }
+  variance = Math.sqrt(variance / heights.length);
+  
+  return {
+    heights,
+    holes,
+    deepHoles,
+    bumpiness,
+    maxHeight,
+    minHeight,
+    avgHeight,
+    nearFullRows,
+    wellPotential,
+    variance
+  };
+}
 
-  // 기본 페널티
-  score -= holes * 100;
-  score -= maxHeight * 5;
-  score -= bumpiness * 3;
+// 모드별 점수 계산
+export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
+  const analysis = analyzeBoard(board);
+  let score = 0;
+  
+  // 모드별 가중치 설정
+  const weights = {
+    safe: {
+      holes: -120,
+      deepHoles: -200,
+      height: -6,
+      bumpiness: -4,
+      variance: -8,
+      nearFullRows: 50
+    },
+    cheese: {
+      holes: -150,
+      deepHoles: -250,
+      height: -8,
+      bumpiness: -2,
+      variance: -5,
+      nearFullRows: 100
+    },
+    straight: {
+      holes: -140,
+      deepHoles: -180,
+      height: -7,
+      bumpiness: -5,
+      variance: -10,
+      nearFullRows: 80
+    },
+    danger: {
+      holes: -200,
+      deepHoles: -300,
+      height: -10,
+      bumpiness: -3,
+      variance: -6,
+      nearFullRows: 150
+    }
+  };
+  
+  const w = weights[mode] || weights.safe;
+  
+  // 모드별 최적화된 점수 계산
+  score += analysis.holes * w.holes;
+  score += analysis.deepHoles * w.deepHoles;
+  score += analysis.maxHeight * w.height;
+  score += analysis.bumpiness * w.bumpiness;
+  score += analysis.variance * w.variance;
+  score += analysis.nearFullRows * w.nearFullRows;
+  
+  // 우물 잠재력 보너스 (높음 = 좋음)
+  score += analysis.wellPotential * 2;
 
   // 액션별 점수 (모드 무관)
   // 
@@ -87,4 +197,3 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   }
 
   return score;
-}

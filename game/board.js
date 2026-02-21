@@ -33,6 +33,61 @@ export function getBumpiness(heights) {
   return bumpiness;
 }
 
+/**
+ * 각 열의 우물 깊이 계산 (I-피스 배치 가능성)
+ * @param {number[]} heights - 열별 높이
+ * @returns {number[]} 각 열의 우물 깊이
+ */
+export function getWellDepths(heights) {
+  const wellDepths = new Array(10).fill(0);
+  for (let col = 0; col < 10; col++) {
+    const leftHeight = col === 0 ? Infinity : heights[col - 1];
+    const rightHeight = col === 9 ? Infinity : heights[col + 1];
+    const wallHeight = Math.min(leftHeight, rightHeight);
+    
+    if (wallHeight > heights[col]) {
+      wellDepths[col] = Math.min(wallHeight - heights[col], 18 - heights[col]);
+    }
+  }
+  return wellDepths;
+}
+
+/**
+ * 가장 최적의 배치 열 찾기
+ * @param {number[]} heights - 열별 높이
+ * @returns {number} 최적 배치 열 인덱스
+ */
+export function findBestColumn(heights) {
+  const wellDepths = getWellDepths(heights);
+  let bestCol = 0;
+  let bestScore = -Infinity;
+  
+  for (let col = 0; col < 10; col++) {
+    // 우물 깊이 우선, 높이가 낮은 것 우대
+    const score = wellDepths[col] * 10 - heights[col];
+    if (score > bestScore) {
+      bestScore = score;
+      bestCol = col;
+    }
+  }
+  
+  return bestCol;
+}
+
+/**
+ * 라인 클리어 가능성 평가 (0~1)
+ * @param {number[][]} board - 게임 보드
+ * @returns {number} 클리어 가능성 점수
+ */
+export function evaluateClearPotential(board) {
+  let maxFilled = 0;
+  for (let row = 19; row >= 0; row--) {
+    const filledCells = board[row].filter(cell => cell !== 0).length;
+    maxFilled = Math.max(maxFilled, filledCells);
+  }
+  return maxFilled / 10; // 0 ~ 1
+}
+
 // 피스를 보드에 놓을 수 있는지 확인
 export function canPlace(board, piece, row, col) {
   for (let r = 0; r < piece.length; r++) {

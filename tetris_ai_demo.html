@@ -497,7 +497,7 @@ function detectSetupBonus(b, mode) {
 }
 
 function lookahead(b, isB2B, mode, depth) {
-  if (depth >= 5 || !nextQueue[depth]) return 0; // depth 5까지 탐색 (더 깊이 봄)
+  if (depth >= 1 || !nextQueue[depth]) return 0; // depth 5까지 탐색 (더 깊이 봄)
   const nextType = nextQueue[depth];
   if (!nextType) return 0;
   

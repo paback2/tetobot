@@ -51,7 +51,7 @@ Branch: feature/tetris-ai-implementation
 
 1. **GitHub에 푸시**: 
    ```
-   git remote add origin https://github.com/[username]/tetrio-bot.git
+   git remote add origin https://github.com/<YOUR_USERNAME>/tetrio-bot.git
    git push -u origin feature/tetris-ai-implementation
    ```
 

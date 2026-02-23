@@ -56,13 +56,17 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
 
   // mini/full 분류
   // - 특수 5번째 킥은 Full
-  // - 그 외에는 front 2코너가 모두 차면 Full, 아니면 Mini
+  // - Mini는 front 2코너가 비어 있는 형태 + 실제 킥이 있었을 때만 허용
   if (kickIndex === 4) {
     return { isTSpin: true, isMini: false };
   }
 
-  const isMini = !(frontA && frontB);
-  return { isTSpin: true, isMini };
+  const miniByCorners = !(frontA && frontB);
+  if (miniByCorners && wasKicked) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  return { isTSpin: true, isMini: false };
 }
 
 

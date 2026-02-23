@@ -201,6 +201,28 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
   return scoredMoves;
 }
 
+
+function selectStrategicCandidates(moves, limit, extraSpecial = 6) {
+  if (moves.length <= limit) return moves;
+
+  const selected = moves.slice(0, limit);
+  const used = new Set(selected.map(m => `${m.move.rotation}:${m.move.col}:${m.move.row}:${m.action}`));
+
+  const specials = moves
+    .filter(m => m.action.includes('_pc') || m.action === 'pc' || actionPriority(m.action) >= 60)
+    .sort((a, b) => actionPriority(b.action) - actionPriority(a.action) || b.score - a.score)
+    .slice(0, extraSpecial);
+
+  for (const sp of specials) {
+    const key = `${sp.move.rotation}:${sp.move.col}:${sp.move.row}:${sp.action}`;
+    if (used.has(key)) continue;
+    selected.push(sp);
+    used.add(key);
+  }
+
+  return selected;
+}
+
 function actionPriority(action) {
   if (!action) return 0;
   if (action === 'pc' || action.includes('_pc')) return 100;
@@ -224,7 +246,7 @@ function findBestMoveRecursive(board, pieces, isB2B, mode, depth = 0) {
   }
 
   const dynamicBeam = Math.max(8, BEAM_WIDTH - depth * 3);
-  const candidates = moves.slice(0, dynamicBeam);
+  const candidates = selectStrategicCandidates(moves, dynamicBeam);
 
   let bestScore = -Infinity;
   let bestMove = null;
@@ -250,7 +272,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   const currentPiece = pieces[0];
   const options = [];
 
-  const noHoldMoves = _findMovesForPiece(board, currentPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+  const noHoldMoves = selectStrategicCandidates(_findMovesForPiece(board, currentPiece, isB2B, mode), SPECIAL_BEAM);
   for (const candidate of noHoldMoves) {
     options.push({
       ...candidate,
@@ -273,7 +295,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
 
   // 홀드 박스에 피스가 있는 경우
   if (heldPiece !== null) {
-    const holdMoves = _findMovesForPiece(board, heldPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+    const holdMoves = selectStrategicCandidates(_findMovesForPiece(board, heldPiece, isB2B, mode), SPECIAL_BEAM);
     for (const candidate of holdMoves) {
       options.push({
         ...candidate,
@@ -295,7 +317,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   } else if (pieces.length > 1) {
     // 홀드 박스가 비어있으면 다음 피스를 현재 턴에 사용
     const nextPiece = pieces[1];
-    const nextPieceMoves = _findMovesForPiece(board, nextPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+    const nextPieceMoves = selectStrategicCandidates(_findMovesForPiece(board, nextPiece, isB2B, mode), SPECIAL_BEAM);
     for (const candidate of nextPieceMoves) {
       options.push({
         ...candidate,

@@ -9,30 +9,11 @@ import { placePiece } from '../game/board.js';
 export function getTPivotFromPlacement(row, col, rotation) {
   switch (rotation) {
     case 1:
-      return { centerR: row + 1, centerC: col };
+      return { centerR: row + 1, centerC: col + 1 };
     case 2:
       return { centerR: row, centerC: col + 1 };
     case 3:
-      return { centerR: row + 1, centerC: col + 1 };
-    case 0:
-    default:
-      return { centerR: row + 1, centerC: col + 1 };
-  }
-}
-
-
-/**
- * 배치 좌표(좌상단)와 회전 상태에서 T 피벗 좌표를 계산한다.
- * PIECES의 trim된 회전 매트릭스 기준 보정값을 사용한다.
- */
-export function getTPivotFromPlacement(row, col, rotation) {
-  switch (rotation) {
-    case 1:
       return { centerR: row + 1, centerC: col };
-    case 2:
-      return { centerR: row, centerC: col + 1 };
-    case 3:
-      return { centerR: row + 1, centerC: col + 1 };
     case 0:
     default:
       return { centerR: row + 1, centerC: col + 1 };

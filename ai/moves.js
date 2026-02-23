@@ -20,20 +20,13 @@ function findAllMovePositions(board, pieceType) {
   const seen = new Set();
 
   if (pieceType === 'T') {
-    const addOrReplaceMove = (move) => {
-      const existingIndex = allMoves.findIndex(
-        (existing) => existing.rotation === move.rotation && existing.col === move.col && existing.row === move.row
-      );
-
-      if (existingIndex !== -1) {
-        if (!move.wasRotated && allMoves[existingIndex].wasRotated) {
-          allMoves[existingIndex] = move;
-        }
-        return;
-      }
-
+        const addOrReplaceMove = (move) => {
+      const key = `${move.rotation}-${move.col}-${move.row}-${move.wasRotated ? 1 : 0}-${move.kickIndex || 0}`;
+      if (seen.has(key)) return;
+      seen.add(key);
       allMoves.push(move);
     };
+
 
     for (let fromRot = 0; fromRot < 4; fromRot++) {
       const piece = rotations[fromRot];
@@ -53,21 +46,27 @@ function findAllMovePositions(board, pieceType) {
         });
 
         // 마지막 입력이 회전인 케이스 (킥 포함)
-        for (let toRot = 0; toRot < 4; toRot++) {
-          if (toRot === fromRot) continue;
-          const nextPiece = rotations[toRot];
-          const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
-          if (!rotResult) continue;
+        // drop 직전/직후 높이에서도 회전을 시도해 T-Spin 진입 경로를 보존한다.
+        const rotationRows = new Set([dropRow, dropRow - 1, dropRow - 2]);
+        for (const rotateRow of rotationRows) {
+          if (rotateRow < 0 || !canPlace(board, piece, rotateRow, col)) continue;
 
-          addOrReplaceMove({
-            rotation: toRot,
-            row: rotResult.row,
-            col: rotResult.col,
-            piece: nextPiece,
-            wasRotated: true,
-            wasKicked: rotResult.kicked,
-            kickIndex: rotResult.kickIndex,
-          });
+          for (let toRot = 0; toRot < 4; toRot++) {
+            if (toRot === fromRot) continue;
+            const nextPiece = rotations[toRot];
+            const rotResult = attemptRotation(board, piece, nextPiece, rotateRow, col, 'T', fromRot, toRot);
+            if (!rotResult) continue;
+
+            addOrReplaceMove({
+              rotation: toRot,
+              row: rotResult.row,
+              col: rotResult.col,
+              piece: nextPiece,
+              wasRotated: true,
+              wasKicked: rotResult.kicked,
+              kickIndex: rotResult.kickIndex,
+            });
+          }
         }
       }
     }

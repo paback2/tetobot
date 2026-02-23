@@ -21,7 +21,7 @@ function getTCenter(row, col, rotation) {
     case 1:
       return { centerR: row + 1, centerC: col };
     case 2:
-      return { centerR: row, centerC: col + 1 };
+      return { centerR: row + 1, centerC: col + 1 };
     case 3:
       return { centerR: row + 1, centerC: col + 1 };
     default:

@@ -1,7 +1,7 @@
 import { PIECES } from '../game/pieces.js';
 import { canPlace, placePiece, clearLines, dropRowOn } from '../game/board.js';
 import { evaluateBoard } from './scoring.js';
-import { checkTSpin, getTSpinAction } from './tspin.js';
+import { checkTSpin, getTSpinAction, getTPivotFromPlacement } from './tspin.js';
 import { attemptRotation } from '../game/rotation.js';
 
 const LOOKAHEAD_DEPTH = 6;
@@ -12,20 +12,6 @@ function isPerfectClear(board) {
   return board.every(row => row.every(cell => cell === 0));
 }
 
-function getTCenter(row, col, rotation) {
-  // NOTE: We use trimmed piece matrices in PIECES, so offsets differ by rotation.
-  // These offsets map back to the true T pivot used by the 3-corner check.
-  switch (rotation) {
-    case 1:
-      return { centerR: row + 1, centerC: col };
-    case 3:
-      return { centerR: row + 1, centerC: col + 1 };
-    case 0:
-    default:
-      return { centerR: row + 1, centerC: col + 1 };
-  }
-}
-
 function findAllMovePositions(board, pieceType) {
   const rotations = PIECES[pieceType];
   if (!rotations || rotations.length === 0) return [];
@@ -34,20 +20,13 @@ function findAllMovePositions(board, pieceType) {
   const seen = new Set();
 
   if (pieceType === 'T') {
-    const addOrReplaceMove = (move) => {
-      const existingIndex = allMoves.findIndex(
-        (existing) => existing.rotation === move.rotation && existing.col === move.col && existing.row === move.row
-      );
-
-      if (existingIndex !== -1) {
-        if (!move.wasRotated && allMoves[existingIndex].wasRotated) {
-          allMoves[existingIndex] = move;
-        }
-        return;
-      }
-
+        const addOrReplaceMove = (move) => {
+      const key = `${move.rotation}-${move.col}-${move.row}-${move.wasRotated ? 1 : 0}-${move.kickIndex || 0}`;
+      if (seen.has(key)) return;
+      seen.add(key);
       allMoves.push(move);
     };
+
 
     for (let fromRot = 0; fromRot < 4; fromRot++) {
       const piece = rotations[fromRot];
@@ -67,75 +46,49 @@ function findAllMovePositions(board, pieceType) {
         });
 
         // 마지막 입력이 회전인 케이스 (킥 포함)
-        for (let toRot = 0; toRot < 4; toRot++) {
-          if (toRot === fromRot) continue;
-          const nextPiece = rotations[toRot];
-          const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
-          if (!rotResult) continue;
+        // drop 직전/직후 높이에서도 회전을 시도해 T-Spin 진입 경로를 보존한다.
+        const rotationRows = new Set([dropRow, dropRow - 1, dropRow - 2]);
+        for (const rotateRow of rotationRows) {
+          if (rotateRow < 0 || !canPlace(board, piece, rotateRow, col)) continue;
 
-          addOrReplaceMove({
-            rotation: toRot,
-            row: rotResult.row,
-            col: rotResult.col,
-            piece: nextPiece,
-            wasRotated: true,
-            wasKicked: rotResult.kicked,
-            kickIndex: rotResult.kickIndex,
-          });
+          for (let toRot = 0; toRot < 4; toRot++) {
+            if (toRot === fromRot) continue;
+            const nextPiece = rotations[toRot];
+            const rotResult = attemptRotation(board, piece, nextPiece, rotateRow, col, 'T', fromRot, toRot);
+            if (!rotResult) continue;
+
+            addOrReplaceMove({
+              rotation: toRot,
+              row: rotResult.row,
+              col: rotResult.col,
+              piece: nextPiece,
+              wasRotated: true,
+              wasKicked: rotResult.kicked,
+              kickIndex: rotResult.kickIndex,
+            });
+          }
         }
       }
     }
+  } else {
+    for (let rot = 0; rot < rotations.length; rot++) {
+      const piece = rotations[rot];
+      for (let col = -2; col < 10; col++) {
+        const row = dropRowOn(board, piece, col);
+        if (row === -1 || !canPlace(board, piece, row, col)) continue;
 
-    // Soft drop
-    if (canPlace(board, piece, state.row + 1, state.col)) {
-      pushState({
-        row: state.row + 1,
-        col: state.col,
-        rotation: state.rotation,
-        wasRotated: false,
-        wasKicked: false,
-        kickIndex: 0,
-      });
-    }
+        const key = `${rot}-${col}-${row}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
 
-    // Shift left/right
-    for (const dc of [-1, 1]) {
-      const newCol = state.col + dc;
-      if (canPlace(board, piece, state.row, newCol)) {
-        pushState({
-          row: state.row,
-          col: newCol,
-          rotation: state.rotation,
+        allMoves.push({
+          rotation: rot,
+          row,
+          col,
+          piece,
           wasRotated: false,
           wasKicked: false,
           kickIndex: 0,
-        });
-      }
-    }
-
-    // Rotate CW / CCW
-    if (rotations.length > 1 && pieceType !== 'O') {
-      const nextRot = (state.rotation + 1) % rotations.length;
-      const prevRot = (state.rotation - 1 + rotations.length) % rotations.length;
-      for (const toRot of new Set([nextRot, prevRot])) {
-        const rotResult = attemptRotation(
-          board,
-          piece,
-          rotations[toRot],
-          state.row,
-          state.col,
-          pieceType,
-          state.rotation,
-          toRot,
-        );
-        if (!rotResult) continue;
-        pushState({
-          row: rotResult.row,
-          col: rotResult.col,
-          rotation: toRot,
-          wasRotated: true,
-          wasKicked: rotResult.kicked,
-          kickIndex: rotResult.kickIndex,
         });
       }
     }
@@ -160,7 +113,7 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
     let extraBonus = 0;
 
     if (pieceType === 'T' && cleared > 0 && wasRotated) {
-      const { centerR, centerC } = getTCenter(row, col, rotation);
+      const { centerR, centerC } = getTPivotFromPlacement(row, col, rotation);
       const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, true, kickIndex, cleared);
       if (tspinResult.isTSpin) {
         isTSpin = true;

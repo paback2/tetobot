@@ -224,9 +224,19 @@ function dropRowOn(board, piece, col) {
 }
 
 // --- From ai/tspin.js - Cold Clear 2 Algorithm ---
-function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0) {
+function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, cleared = 0) {
     // Guideline 핵심: 마지막 동작이 회전이어야 함
     if (!wasRotated) {
+        return { isTSpin: false, isMini: false };
+    }
+
+    // 일반 싱글/더블/트리플 오탐 방지: 줄을 지우지 않았다면 T-Spin 점수로 취급하지 않는다.
+    if (cleared <= 0) {
+        return { isTSpin: false, isMini: false };
+    }
+
+    // 라인 클리어가 난 T-Spin은 킥 회전이 확인된 경우에만 인정한다.
+    if (!wasKicked) {
         return { isTSpin: false, isMini: false };
     }
 
@@ -416,7 +426,7 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
             }
             
             // T-piece을 놓은 후의 board에서 확인해야 함!
-            const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex);
+            const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex, cleared);
             if (tspinResult.isTSpin && cleared > 0) {  // T-Spin은 line clear와 함께만 유효
                 isTSpin = true; isMini = tspinResult.isMini;
                 action = getTSpinAction(true, isMini, cleared);

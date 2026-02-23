@@ -186,3 +186,32 @@ export function dropRowOn(board, piece, col) {
   }
   return canPlace(board, piece, row, col) ? row : -1;
 }
+
+// ==========================================
+// 홀드 기능 관련 함수들
+// ==========================================
+
+/**
+ * 홀드 기능을 사용하여 현재 피스와 홀드된 피스를 교환
+ * @param {string} currentPiece - 현재 피스 타입 (예: 'T', 'I')
+ * @param {string|null} heldPiece - 홀드된 피스 타입 (없으면 null)
+ * @returns {{newCurrent: string, newHeld: string}} 교환 후의 현재 피스와 홀드 피스
+ */
+export function performHold(currentPiece, heldPiece) {
+  if (heldPiece === null) {
+    // 홀드가 비어있으면 현재 피스를 홀드하고 다음 피스를 요청해야 함
+    return { newCurrent: null, newHeld: currentPiece };
+  } else {
+    // 홀드된 피스와 현재 피스를 교환
+    return { newCurrent: heldPiece, newHeld: currentPiece };
+  }
+}
+
+/**
+ * 홀드 사용이 가능한지 확인
+ * @param {boolean} canHold - 이 턴에 홀드를 사용할 수 있는지 여부
+ * @returns {boolean} 홀드 사용 가능 여부
+ */
+export function isHoldAvailable(canHold) {
+  return canHold === true;
+}

@@ -144,6 +144,13 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   else if (lastAction === "tsm") score += 1500;   // T-Spin Mini
   else if (lastAction === "tetris") score += 2000;
 
+  // Perfect Clear 보너스 (매우 높음)
+  if (lastAction.includes("_pc") || lastAction === "pc") {
+    score += 20000;  // 매우 높은 점수
+    if (lastAction === "tsd_pc") score += 10000;  // TSD + PC 조합
+    if (lastAction === "tst_pc") score += 8000;   // TST + PC 조합
+  }
+
   // B2B 보너스
   // B2B 유지: T-Spin, Tetris, PC 동반 액션 모두 포함
   if (isB2B) {
@@ -156,12 +163,14 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   if (mode === "safe") {
     // 안전 모드: PC 탐색 + T-Spin 극대화
     if (lastAction === "tsd") score += 500;
+    if (lastAction.includes("_pc")) score += 5000;  // PC 추가 보너스
     if (lastAction === "tsf" || lastAction === "tsf_pc") score += 500;
   }
 
   if (mode === "cheese") {
     // 치즈 모드: 콤보 + 멀티플라이어 테트리스
     if (lastAction === "tetris" || lastAction === "tetris_pc") score += 3000;
+    if (lastAction.includes("_pc")) score += 3000;  // PC도 중요
     if (lastAction === "single" || lastAction === "double" || lastAction === "triple") {
       score += 500; // 생존을 위한 예외 — 페널티 없음
     }
@@ -171,6 +180,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
     // 일자줄 모드: 테트리스↔TSD 교차
     if (lastAction === "tetris" || lastAction === "tetris_pc") score += 1000;
     if (lastAction === "tsd") score += 1000;
+    if (lastAction.includes("_pc")) score += 4000;  // PC도 높음
   }
 
   if (mode === "danger") {
@@ -178,6 +188,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
     if (lastAction === "tsd") score += 5000;   // TSD 마무리
     if (lastAction === "tst" || lastAction === "tst_pc") score += 4000;   // TST 마무리
     if (lastAction === "tetris" || lastAction === "tetris_pc") score += 3500; // Tetris 마무리
+    if (lastAction.includes("_pc")) score += 15000;  // PC로 대역이 공격 중단 (최고의 상황)
     if (lastAction === "single") score -= 5000; // Single 마무리 금지
     score += 1000; // 위기 탈출 시도 보너스
   }

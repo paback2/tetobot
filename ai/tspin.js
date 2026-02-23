@@ -13,64 +13,62 @@ import { canPlace } from '../game/board.js';
  * @param {boolean} debug - 디버그 모드 (로깅 활성화)
  * @returns {{isTSpin: boolean, isMini: boolean}} T-Spin 여부 및 미니 여부
  */
-export function checkTSpin(board, row, col, rotation, wasKicked = false, debug = false) {
-  // 3-Corner Rule: T-피스 3x3 경계 4개 모서리 확인
-  // 피스 중심(row, col)을 기준으로 ±1 범위
-  const corners = {
-    A: { row: row - 1, col: col - 1 }, // 좌상
-    B: { row: row - 1, col: col + 1 }, // 우상
-    C: { row: row + 1, col: col - 1 }, // 좌하
-    D: { row: row + 1, col: col + 1 }  // 우하
-  };
-
-  // 벽이나 블록으로 채워진 모서리 개수
-  const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
-
-  let filledCorners = 0;
-  const filledList = [];
-  
-  for (const [name, pos] of Object.entries(corners)) {
-    if (isFilled(pos.row, pos.col)) {
-      filledCorners++;
-      filledList.push(name);
-    }
-  }
-
-  // T-Spin 필수 조건: 3개 이상 모서리가 채워져 있어야 함
-  if (filledCorners < 3) {
+export function checkTSpin(board, row, col, rotation, wasKicked = false, cleared = 0, kickIndex = 0, debug = false) {
+  // 반드시 마지막 동작이 SRS 킥(회전)이었고, 실제로 킥이 발생(kickIndex > 0)해야만 T-Spin 인정
+  if (!wasKicked || kickIndex === 0) {
+    if (debug) console.log('[T-Spin] No SRS kick or no actual kick, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }
 
-  // Full T-Spin vs Mini T-Spin 판별
-  // 킥된 회전이 아니면 Mini T-Spin (= 드롭으로만 배치)
-  if (!wasKicked) {
+  // 보드 가장자리(왼쪽/오른쪽)에서의 잘못된 판정 방지: 벽에 flush된 상태에서 킥이 없으면 무조건 T-Spin 불가
+  if ((col <= 0 || col >= 8) && kickIndex <= 1) {
+    if (debug) console.log('[T-Spin] Edge position with no real kick, not a T-Spin');
+    return { isTSpin: false, isMini: false };
+  }
+
+  // 4개 대각선 코너
+  const corners = [
+    [-1, -1], [1, -1], [-1, 1], [1, 1]
+  ];
+  const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
+  let occupied = 0;
+  for (const [dx, dy] of corners) {
+    if (isFilled(row + dx, col + dy)) occupied++;
+  }
+  if (occupied < 3) {
+    if (debug) console.log('[T-Spin] Less than 3 corners, not a T-Spin');
+    return { isTSpin: false, isMini: false };
+  }
+
+  // mini/full 구분: cold-clear-2/cobra-tetrio-movegen 스타일
+  // 4번째 킥(특수 SRS)은 무조건 Full
+  if (kickIndex === 4) return { isTSpin: true, isMini: false };
+
+  // SRS 미니 킥(1, 2번 킥)만 mini 허용, 0번(중심), 3번(축 이동)은 Full
+  // mini 코너(회전 방향 기준 앞쪽 2개)
+  function rotateCorner([dx, dy], rot) {
+    switch (rot) {
+      case 0: return [dx, dy];
+      case 1: return [dy, -dx];
+      case 2: return [-dx, -dy];
+      case 3: return [-dy, dx];
+    }
+  }
+  const miniCorners = [
+    rotateCorner([-1, 1], rotation),
+    rotateCorner([1, 1], rotation)
+  ];
+  let miniOccupied = 0;
+  for (const [dx, dy] of miniCorners) {
+    if (isFilled(row + dx, col + dy)) miniOccupied++;
+  }
+
+  // mini는 1,2번 킥(미니킥) + 앞쪽 2코너 모두 막힘
+  if ((kickIndex === 1 || kickIndex === 2) && miniOccupied === 2) {
     return { isTSpin: true, isMini: true };
   }
-
-  // 킥된 회전: 회전 상태에 따라 미니 여부 판별
-  // 각 회전 상태에서 "열린 쪽" 확인 (한 귀퉁이가 안 막혀있으면 Mini)
-  let isMini = false;
-  
-  switch (rotation) {
-    case 0: // ▲ (위쪽에 돌출) - 아래쪽 두 모서리 확인
-      // C 또는 D가 열려있으면 Mini
-      isMini = !isFilled(row + 1, col - 1) || !isFilled(row + 1, col + 1);
-      break;
-    case 1: // ◀ (왼쪽에 돌출) - 오른쪽 모서리 확인
-      // B 또는 D가 열려있으면 Mini
-      isMini = !isFilled(row - 1, col + 1) || !isFilled(row + 1, col + 1);
-      break;
-    case 2: // ▼ (아래쪽에 돌출) - 위쪽 모서리 확인
-      // A 또는 B가 열려있으면 Mini
-      isMini = !isFilled(row - 1, col - 1) || !isFilled(row - 1, col + 1);
-      break;
-    case 3: // ▶ (오른쪽에 돌출) - 왼쪽 모서리 확인
-      // A 또는 C가 열려있으면 Mini
-      isMini = !isFilled(row - 1, col - 1) || !isFilled(row + 1, col - 1);
-      break;
-  }
-
-  return { isTSpin: true, isMini };
+  // 나머지는 모두 Full
+  return { isTSpin: true, isMini: false };
 }
 
 /**

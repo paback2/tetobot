@@ -50,7 +50,10 @@
   .mode-straight { background: #2a2a1a; color: #fbbf24; border: 1px solid #fbbf24; }
   .mode-cheese { background: #3a2010; color: #f97316; border: 1px solid #f97316; }
   .mode-danger { background: #3a1a1a; color: #f87171; border: 1px solid #f87171; }
-  .last-action { font-size: 0.7rem; color: var(--accent2); text-shadow: 0 0 8px var(--accent2); margin-top: 6px; min-height: 18px; }
+  .last-action { font-size: 0.75rem; color: var(--accent); text-shadow: 0 0 12px var(--accent), 0 0 20px var(--accent); margin-top: 6px; min-height: 30px; font-weight: bold; letter-spacing: 0.1em; line-height: 1.4; }
+  .last-action.tspin { color: #ff006e; text-shadow: 0 0 12px #ff006e, 0 0 20px #ff006e; }
+  .last-action.perfect { color: #7fff00; text-shadow: 0 0 12px #7fff00, 0 0 20px #7fff00; }
+  .last-action.tetris { color: #ff8800; text-shadow: 0 0 12px #ff8800, 0 0 20px #ff8800; }
   .board-wrap {
     position: relative; border: 1px solid var(--border); border-radius: 8px;
     overflow: hidden; box-shadow: 0 0 30px rgba(0,245,255,0.1), inset 0 0 30px rgba(0,0,0,0.5);
@@ -220,32 +223,57 @@ function dropRowOn(board, piece, col) {
     return canPlace(board, piece, row, col) ? row : -1;
 }
 
-// --- From ai/tspin.js ---
-function checkTSpin(board, row, col, rotation, wasKicked = false) {
-    const corners = {
-        A: { row: row - 1, col: col - 1 }, B: { row: row - 1, col: col + 1 },
-        C: { row: row + 1, col: col - 1 }, D: { row: row + 1, col: col + 1 }
-    };
+// --- From ai/tspin.js - Cold Clear 2 Algorithm ---
+function checkTSpin(board, row, col, rotation, wasKicked = false, kickIndex = 0) {
+    // cold-clear-2/cobra-movegen: 실제 SRS 킥이 발생(kickIndex > 0)해야만 T-Spin 인정
+    if (!wasKicked || kickIndex === 0) {
+        return { isTSpin: false, isMini: false };
+    }
+    
+    // 보드 가장자리(왼쪽/오른쪽): 벽에 flush되고 킥이 없으면 T-Spin 불가
+    if ((col <= 0 || col >= 8) && kickIndex <= 1) {
+        return { isTSpin: false, isMini: false };
+    }
+    
+    // 4개 대각선 코너 확인
+    const corners = [
+        [row - 1, col - 1], [row - 1, col + 1],
+        [row + 1, col - 1], [row + 1, col + 1]
+    ];
+    
     const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
-    let filledCorners = 0;
-    if (isFilled(corners.A.row, corners.A.col)) filledCorners++;
-    if (isFilled(corners.B.row, corners.B.col)) filledCorners++;
-    if (isFilled(corners.C.row, corners.C.col)) filledCorners++;
-    if (isFilled(corners.D.row, corners.D.col)) filledCorners++;
+    const filledCorners = corners.filter(([r, c]) => isFilled(r, c)).length;
+    
     if (filledCorners < 3) {
         return { isTSpin: false, isMini: false };
     }
-    if (!wasKicked) {
+    
+    // mini 코너(회전 방향 기준 앞쪽 2개)
+    let miniCorners = [];
+    if (rotation === 0) {  // North
+        miniCorners = [[row + 1, col - 1], [row + 1, col + 1]];
+    } else if (rotation === 1) {  // East
+        miniCorners = [[row - 1, col + 1], [row + 1, col + 1]];
+    } else if (rotation === 2) {  // South
+        miniCorners = [[row - 1, col - 1], [row - 1, col + 1]];
+    } else if (rotation === 3) {  // West
+        miniCorners = [[row - 1, col - 1], [row + 1, col - 1]];
+    }
+    
+    const filledMiniCorners = miniCorners.filter(([r, c]) => isFilled(r, c)).length;
+    
+    // mini/full 구분: cold-clear-2 스타일
+    // 4번째 킥(특수 SRS)은 무조건 Full
+    if (kickIndex === 4) {
+        return { isTSpin: true, isMini: false };
+    }
+    
+    // SRS 미니 킥(1, 2번)만 mini 허용, 그 외는 Full
+    if ((kickIndex === 1 || kickIndex === 2) && filledMiniCorners === 2) {
         return { isTSpin: true, isMini: true };
     }
-    let isMini = false;
-    switch (rotation) {
-        case 0: isMini = !isFilled(row + 1, col - 1) || !isFilled(row + 1, col + 1); break;
-        case 1: isMini = !isFilled(row - 1, col + 1) || !isFilled(row + 1, col + 1); break;
-        case 2: isMini = !isFilled(row - 1, col - 1) || !isFilled(row - 1, col + 1); break;
-        case 3: isMini = !isFilled(row - 1, col - 1) || !isFilled(row + 1, col - 1); break;
-    }
-    return { isTSpin: true, isMini };
+    
+    return { isTSpin: true, isMini: false };
 }
 function getTSpinAction(isTSpin, isMini, cleared) {
     if (!isTSpin) return 'none';
@@ -310,8 +338,8 @@ function detectMode(board) {
 // --- From ai/moves.js ---
 // 10수 예측은 연산량이 너무 많아 실시간 게임에 부적합합니다.
 // T-Spin을 볼 수 있으면서도 성능을 유지하는 3으로 절충합니다. (현재+2수)
-const LOOKAHEAD_DEPTH = 3;
-const BEAM_WIDTH = 8;
+const LOOKAHEAD_DEPTH = 4;  // Cold Clear 스타일: 더 깊은 lookahead
+const BEAM_WIDTH = 12;  // Top candidates to explore
 
 function isPerfectClear(board) {
     return board.every(row => row.every(cell => cell === 0));
@@ -347,10 +375,20 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
         let action = 'none';
         let isTSpin = false, isMini = false;
         if (pieceType === 'T') {
+            // T 피스의 중심 좌표 (piece의 왼쪽 위 기준)
+            // Rotation 0: [[0,1,0], [1,1,1]] → 중심 (1,1) 상대좌표
+            // Rotation 1: [[1,0], [1,1], [1,0]] → 중심 (1,1) 상대좌표
+            // Rotation 2: [[1,1,1], [0,1,0]] → 중심 (0,1) 상대좌표
+            // Rotation 3: [[0,1], [1,1], [0,1]] → 중심 (1,1) 상대좌표
+            
             let centerR = row + 1, centerC = col + 1;
-            if (rotation === 1) { centerC = col; } else if (rotation === 2) { centerR = row; }
-            const tspinResult = checkTSpin(board, centerR, centerC, rotation, false);
-            if (tspinResult.isTSpin) {
+            if (rotation === 2) {
+                centerR = row;
+            }
+            
+            // T-piece을 놓은 후의 board에서 확인해야 함!
+            const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, false);
+            if (tspinResult.isTSpin && cleared > 0) {  // T-Spin은 line clear와 함께만 유효
                 isTSpin = true; isMini = tspinResult.isMini;
                 action = getTSpinAction(true, isMini, cleared);
             }
@@ -367,8 +405,30 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
         } else if (isB2B && cleared > 0 && cleared < 4) {
             newB2B = false;
         }
-        const score = evaluateBoard(clearedBoard, action, newB2B, 0, mode);
-        scoredMoves.push({ move, score, board: clearedBoard, b2b: newB2B, action });
+        
+        let baseScore = evaluateBoard(clearedBoard, action, newB2B, 0, mode);
+        let tSpinBonus = 0;
+        let perfectClearBonus = 0;
+        
+        // T-Spin 점수 보너스 (Cold Clear 2 스타일)
+        if (isTSpin) {
+            if (!isMini) {  // Full T-Spin
+                const tSpinScores = [1500, 3000, 5500, 9000];
+                tSpinBonus = tSpinScores[Math.min(cleared, 3)] || 1500;
+            } else {  // Mini T-Spin
+                tSpinBonus = cleared > 0 ? 500 : 100;
+            }
+        }
+        
+        // Perfect Clear 점수 보너스
+        if (action.includes('_pc') || action === 'pc') {
+            perfectClearBonus = 20000;
+            if (action === 'tsd_pc') perfectClearBonus += 10000;
+            if (action === 'tst_pc') perfectClearBonus += 8000;
+        }
+        
+        const score = baseScore + tSpinBonus + perfectClearBonus;
+        scoredMoves.push({ move, score, baseScore, tSpinBonus, perfectClearBonus, board: clearedBoard, b2b: newB2B, action, isTSpin, isMini });
     }
     return scoredMoves;
 }
@@ -487,7 +547,7 @@ function spawnPiece() {
     currentRot = 0;
     currentCol = 3;
     currentRow = 0;
-    canHold = true;
+    canHold = true; // 새 피스가 나올 때마다 홀드 사용 가능
     pieces++;
     if (chaosMode && pieces % 8 === 0) spawnGarbage(2);
     // Use numeric board for initial placement check
@@ -533,12 +593,104 @@ function aiStep() {
     const mode = detectMode(numericBoard);
     updateModeDisplay(mode);
     
+    // 디버그: 홀드 상태 확인
+    console.log('턴 시작:', { 현재: currentPiece, 홀드: holdPiece, 사용가능: canHold, 다음큐: nextQueue.slice(0, 3) });
+    
     const piecesToConsider = [currentPiece, ...nextQueue];
     const move = findBestMove(numericBoard, piecesToConsider, b2b, mode);
     
     if (!move) {
         endGame();
         return;
+    }
+
+    // 홀드 사용 판단: 모든 상황에서 도움이 될 때 사용
+    let useHold = false;
+    if (canHold && holdPiece !== null) {
+        // 홀드된 피스로 얻을 수 있는 최고 점수 계산
+        const heldMoves = _findMovesForPiece(numericBoard, holdPiece, b2b, mode);
+        if (heldMoves.length > 0) {
+            heldMoves.sort((a, b) => b.score - a.score);
+            const heldMove = heldMoves[0];
+            const heldScore = heldMove.score;
+            const normalScore = (move && move.score) || 0;
+            
+            // T-Spin, Perfect Clear를 위해 홀드 사용 (안전한 상황에서도)
+            const isTSpinOrPC = [
+                'tsd', 'tst', 'tss', 'tsf',  // T-Spin
+                'pc', 'tetris_pc', 'triple_pc', 'double_pc', 'single_pc'  // Perfect Clear
+            ].includes(heldMove.action);
+            
+            // T-Spin/PC를 할 수 있으면 홀드 사용, 아니면 점수가 훨씬 높을 때만 사용
+            if (isTSpinOrPC) {
+                useHold = true;
+                console.log('홀드 결정 (T-Spin/PC):', heldMove.action);
+            } else if (heldScore > normalScore + 200) {
+                // 일반 경우는 점수 차이가 클 때만 홀드 (200점 이상)
+                useHold = true;
+                console.log('홀드 결정 (점수):', heldScore, '>', normalScore + 200);
+            }
+        }
+    } else if (canHold && holdPiece === null) {
+        // 첫 홀드: 현재 피스를 홀드하고 다음 피스를 받을 지 판단
+        // 다음 피스가 현재 피스보다 나으면 현재 피스를 홀드
+        if (nextQueue.length > 0) {
+            const nextPieceMoves = _findMovesForPiece(numericBoard, nextQueue[0], b2b, mode);
+            if (nextPieceMoves.length > 0) {
+                nextPieceMoves.sort((a, b) => b.score - a.score);
+                const nextScore = nextPieceMoves[0].score;
+                const currentScore = (move && move.score) || 0;
+                
+                // 다음 피스가 나으면 현재 피스를 홀드 (단, 현재 점수가 낮을 때 우선적으로)
+                if (nextScore > currentScore) {
+                    useHold = true;
+                    console.log('홀드 결정 (다음 피스):', nextScore, '>', currentScore);
+                } else if (nextScore > currentScore - 100) {
+                    // 현재 점수와 비슷해도 일부러 홀드하는 경우 (색다른 시도)
+                    if (Math.random() < 0.3) {  // 30% 확률로
+                        useHold = true;
+                        console.log('홀드 결정 (시험적):', nextScore, '>', currentScore - 100);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 홀드 실행 및 큐/가방 동기화 (중복/유령 미노 방지)
+    if (useHold) {
+        console.log('홀드 사용:', { 현재: currentPiece, 홀드됨: holdPiece, useHold });
+        if (holdPiece === null) {
+            // 첫 홀드: 현재 피스를 홀드 박스로 이동
+            holdPiece = currentPiece;
+            // 큐에서 새 피스 받기
+            currentPiece = nextQueue[0];
+            // nextQueue에서 currentPiece 제거 (중복 방지)
+            nextQueue = nextQueue.filter(p => p !== currentPiece && p !== holdPiece);
+            // 7-bag 보충
+            while (nextQueue.length < 5) nextQueue.push(randomPiece());
+            console.log('첫 홀드 후:', { 현재: currentPiece, 홀드됨: holdPiece });
+        } else {
+            // 홀드된 피스와 현재 피스 교환
+            const temp = currentPiece;
+            currentPiece = holdPiece;
+            holdPiece = temp;
+            // nextQueue에서 currentPiece/holdPiece 모두 제거 (중복 방지)
+            nextQueue = nextQueue.filter(p => p !== currentPiece && p !== holdPiece);
+            // 7-bag 보충
+            while (nextQueue.length < 5) nextQueue.push(randomPiece());
+            console.log('피스 교환 후:', { 현재: currentPiece, 홀드됨: holdPiece });
+        }
+        canHold = false;
+        // 홀드 후 AI 움직임 다시 계산
+        const newPiecesToConsider = [currentPiece, ...nextQueue];
+        const newMove = findBestMove(numericBoard, newPiecesToConsider, b2b, mode);
+        if (!newMove) {
+            endGame();
+            return;
+        }
+        // 홀드 후의 최적 이동으로 업데이트
+        move.move = newMove.move;
+        move.score = newMove.score;
     }
 
     currentRot = move.move.rotation;
@@ -565,8 +717,8 @@ function aiStep() {
     const { board: clearedBoardWithColor, cleared } = clearLines(tempBoard);
     board = clearedBoardWithColor;
 
-    updateScore(move.action, cleared);
-    document.getElementById('lastAction').textContent = formatAction(move.action);
+    updateScore(move.move.action, cleared);
+    updateActionDisplay(move.move.action, useHold);
     spawnPiece();
     updateStats();
     drawAll();
@@ -593,13 +745,37 @@ function updateScore(action, cleared) {
 
 function formatAction(action) {
     const map = {
-        tetris_pc: '★ TETRIS PC!', triple_pc: '★ TRIPLE PC!', double_pc: '★ DOUBLE PC!',
-        single_pc: '★ SINGLE PC!', pc: '★ PERFECT CLEAR!', tsd: '⚡ T-SPIN DOUBLE',
-        tst: '🔺 T-SPIN TRIPLE', tss: '· T-SPIN SINGLE', tsf: '✨ T-SPIN FIN',
-        tsm: '· T-SPIN MINI', tetris: '▣ TETRIS', triple: 'TRIPLE',
-        double: 'DOUBLE', single: 'single'
+        tetris_pc: '✦ TETRIS\nPERFECT CLEAR', triple_pc: '✦ TRIPLE\nPERFECT CLEAR', double_pc: '✦ DOUBLE\nPERFECT CLEAR',
+        single_pc: '✦ SINGLE\nPERFECT CLEAR', pc: '✦ PERFECT\nCLEAR', tsd: '⚡ T-SPIN\nDOUBLE',
+        tst: '🔺 T-SPIN\nTRIPLE', tss: '· T-SPIN\nSINGLE', tsf: '✨ T-SPIN\nFIN',
+        tsm: '· T-SPIN\nMINI', tetris: '▣ TETRIS', triple: 'TRIPLE',
+        double: 'DOUBLE', single: 'single', tsm_zero: '· TSM'
     };
     return map[action] || '';
+}
+
+function updateActionDisplay(action, usedHold) {
+    const el = document.getElementById('lastAction');
+    el.textContent = formatAction(action);
+    
+    // 기술 카테고리별 스타일 적용
+    el.className = 'last-action';
+    const isTSpin = ['tsd', 'tst', 'tss', 'tsf', 'tsm', 'tszero', 'tsm_zero'].includes(action);
+    const isPerfect = action.includes('pc');
+    const isTetris = action === 'tetris';
+    
+    if (isPerfect) {
+        el.classList.add('perfect');
+    } else if (isTSpin) {
+        el.classList.add('tspin');
+    } else if (isTetris) {
+        el.classList.add('tetris');
+    }
+    
+    // 홀드 사용 시 표시
+    if (usedHold) {
+        el.textContent = '🔄 HOLD\n' + el.textContent;
+    }
 }
 
 function updateModeDisplay(mode) {
@@ -623,7 +799,11 @@ const holdCtx = holdCanvas.getContext('2d');
 const nextCanvas = document.getElementById('nextCanvas');
 const nextCtx = nextCanvas.getContext('2d');
 
-function drawAll() { drawBoard(); drawHold(); drawNext(); }
+function drawAll() {
+    drawBoard();
+    drawHold();
+    drawNext();
+}
 
 function drawCell(ctx, x, y, color, size) {
     ctx.fillStyle = color;
@@ -664,20 +844,48 @@ function drawBoard() {
 }
 
 function drawMini(ctx, type, canvasW, offsetY, cellSize) {
-    if (!type) return;
+    if (!type || !PIECES[type]) return;
     const piece = PIECES[type].rotations[0];
+    if (!piece || piece.length === 0) return;
+    
     const color = PIECES[type].color;
-    const pw = piece[0].length * cellSize, ph = piece.length * cellSize;
-    const sx = (canvasW - pw) / 2, sy = offsetY + (cellSize * 2 - ph) / 2;
-    for (let r = 0; r < piece.length; r++)
-        for (let c = 0; c < piece[r].length; c++)
-            if (piece[r][c]) drawCell(ctx, sx + c * cellSize, sy + r * cellSize, color, cellSize);
+    const pw = piece[0].length * cellSize;
+    const ph = piece.length * cellSize;
+    const sx = (canvasW - pw) / 2;
+    const sy = offsetY + (cellSize * 2 - ph) / 2;
+    
+    for (let r = 0; r < piece.length; r++) {
+        for (let c = 0; c < piece[r].length; c++) {
+            if (piece[r][c]) {
+                drawCell(ctx, sx + c * cellSize, sy + r * cellSize, color, cellSize);
+            }
+        }
+    }
 }
 
 function drawHold() {
     holdCtx.fillStyle = '#0d0d1f';
     holdCtx.fillRect(0, 0, 72, 54);
-    if (holdPiece) drawMini(holdCtx, holdPiece, 72, 0, 14);
+    holdCtx.strokeStyle = 'rgba(0,245,255,0.3)';
+    holdCtx.lineWidth = 1;
+    holdCtx.strokeRect(0, 0, 72, 54);
+    
+    if (holdPiece) {
+        drawMini(holdCtx, holdPiece, 72, 0, 14);
+        holdCtx.fillStyle = 'rgba(0,245,255,0.5)';
+        holdCtx.font = '8px "Share Tech Mono"';
+        holdCtx.textAlign = 'left';
+        holdCtx.fillText('HELD', 8, 48);
+    } else {
+        // 홀드 박스가 비어있을 때
+        holdCtx.fillStyle = 'rgba(200,216,255,0.2)';
+        holdCtx.font = '10px "Share Tech Mono"';
+        holdCtx.textAlign = 'center';
+        holdCtx.textBaseline = 'middle';
+        holdCtx.fillText('EMPTY', 36, 27);
+    }
+    holdCtx.textAlign = 'left';
+    holdCtx.textBaseline = 'top';
 }
 
 function drawNext() {

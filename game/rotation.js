@@ -116,19 +116,17 @@ export function attemptRotation(board, piece, nextPiece, row, col, pieceType, fr
   
   // 킥 테이블 가져오기
   const kickOffsets = getSRSKickTable(pieceType, fromRotation, toRotation);
-  
-  // 각 킥 오프셋 시도
-  for (const [dx, dy] of kickOffsets) {
+  // 각 킥 오프셋 시도 (kickIndex 필요)
+  for (let i = 0; i < kickOffsets.length; i++) {
+    const [dx, dy] = kickOffsets[i];
     const newCol = col + dx;
     const newRow = row + dy;
-    
     if (canPlace(board, nextPiece, newRow, newCol)) {
       // 첫 번째 오프셋 [0,0]은 킥이 아님
       const kicked = dx !== 0 || dy !== 0;
-      return { row: newRow, col: newCol, kicked };
+      return { row: newRow, col: newCol, kicked, kickIndex: i };
     }
   }
-  
   return null; // 회전 불가
 }
 

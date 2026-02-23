@@ -86,22 +86,21 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: false };
   }
 
-  // Mini/Full 분기 (cold-clear/cobra 계열 실전 기준에 맞춘 보수 분류):
-  // - 2줄 이상 클리어는 Full
-  // - 1줄 클리어는 Mini를 우선하고, 강한 Full 시그널(앞코너 2개 + 킥)만 Full
+  // Mini/Full 분기 (오탐 억제 우선):
+  // - 2줄 이상은 킥 회전(또는 test-5)인 경우에만 Full로 인정
+  // - 1줄은 기본 Mini, test-5만 Full Single
   if (cleared >= 2) {
+    if (!wasKicked && kickIndex !== 4) {
+      return { isTSpin: false, isMini: false };
+    }
     return { isTSpin: true, isMini: false };
   }
 
   if (cleared === 1) {
-    if (!wasKicked) {
-      return { isTSpin: true, isMini: true };
+    if (kickIndex === 4) {
+      return { isTSpin: true, isMini: false };
     }
-
-    // 킥 회전 싱글은 기본 Mini.
-    // 단, 앞코너 2개가 모두 찬 강한 형태만 Full Single로 유지.
-    const isMiniSingle = frontOccupied < 2 || kickIndex === 1 || kickIndex === 2;
-    return { isTSpin: true, isMini: isMiniSingle };
+    return { isTSpin: true, isMini: true };
   }
 
   const isMini = frontOccupied < 2;

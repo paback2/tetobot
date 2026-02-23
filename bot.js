@@ -47,11 +47,15 @@ class GameState {
 
     const { newCurrent, newHeld } = performHold(this.currentPiece, this.heldPiece);
 
-    if (newCurrent === null && this.pieceQueue.length > 0) {
+    if (newCurrent === null) {
+      if (this.pieceQueue.length === 0) {
+        // 다음 피스가 없으면 홀드 처리 불가 (피스 소실 방지)
+        return false;
+      }
       // 홀드 박스가 비어있었으므로 다음 피스 사용
       this.heldPiece = newHeld;
       this.currentPiece = this.pieceQueue.shift();
-    } else if (newCurrent !== null) {
+    } else {
       // 홀드된 피스와 교환
       this.heldPiece = newHeld;
       this.currentPiece = newCurrent;

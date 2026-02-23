@@ -46,8 +46,16 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
 
   let occupied = 0;
+  let occupiedInBounds = 0;
   for (const [dx, dy] of corners) {
-    if (isFilled(row + dx, col + dy)) occupied++;
+    const cr = row + dx;
+    const cc = col + dy;
+    const filled = isFilled(cr, cc);
+    if (!filled) continue;
+    occupied++;
+    if (cr >= 0 && cr < 20 && cc >= 0 && cc < 10 && board[cr][cc] !== 0) {
+      occupiedInBounds++;
+    }
   }
 
   if (occupied < 3) {
@@ -72,6 +80,13 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   // 킥 회전이 아닌 케이스는 T-Spin으로 취급하지 않는다.
   if (cleared > 0 && !wasKicked) {
     if (debug) console.log('[T-Spin] Cleared line without kick');
+    return { isTSpin: false, isMini: false };
+  }
+
+  // 벽/천장에 의한 코너 충족만으로 발생하는 오탐 방지:
+  // 실제 블록으로 채워진 코너가 너무 적으면 T-Spin으로 보지 않는다.
+  if (cleared > 0 && occupiedInBounds < 2) {
+    if (debug) console.log('[T-Spin] Too few in-bounds occupied corners');
     return { isTSpin: false, isMini: false };
   }
 

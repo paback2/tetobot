@@ -32,7 +32,7 @@ function getDynamicSearchConfig(pieceCount) {
 
 function actionPriorityBoost(action) {
   if (!action) return 0;
-  if (action === 'pc' || action.includes('_pc')) return 120000;
+  if (action === 'pc' || action.includes('_pc')) return 16000;
   if (action === 'tsd' || action === 'tsd_pc') return 18000;
   if (action === 'tst' || action === 'tst_pc') return 14000;
   if (action === 'tss' || action === 'tss_pc') return 7000;
@@ -209,7 +209,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
     const totalScore = baseScore + bonusScore;
 
     // Perfect Clear 발견 시 극도로 높은 보상
-    const pcBoost = isPerfectClear(clearedBoard) ? 100000 : 0;
+    const pcBoost = isPerfectClear(clearedBoard) ? 8000 : 0;
 
     scoredMoves.push({
       move,
@@ -297,7 +297,7 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
     // Perfect Clear를 찾으면 즉시 반환
     if (candidate.isPerfectClear) {
       const result = {
-        score: candidate.score + 1000000,  // 극도로 높은 점수
+        score: candidate.score + 60000,  // PC 우선은 유지하되 과도한 편향 완화
         move: candidate.move,
         action: candidate.action,
         isPerfectClear: true

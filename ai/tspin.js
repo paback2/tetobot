@@ -98,7 +98,7 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   // - 2줄 이상은 "강한" 스핀 증거(테스트5 또는 킥+앞코너 2개)에서만 Full
   // - 1줄은 기본 Mini, test-5만 Full Single
   if (cleared >= 2) {
-    const strongFull = kickIndex === 4 || (wasKicked && frontOccupied === 2 && blockedCardinal >= 3);
+    const strongFull = kickIndex === 4 || (wasKicked && kickIndex >= 1 && frontOccupied === 2 && blockedCardinal >= 4);
     if (!strongFull) {
       return { isTSpin: false, isMini: false };
     }

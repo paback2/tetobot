@@ -55,6 +55,18 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
+
+  // 과대 판정 방지를 위해 immobile 조건(상하좌우 4방향 중 3방향 이상 막힘)을 추가한다.
+  const cardinal = [[-1,0],[1,0],[0,-1],[0,1]];
+  let blockedCardinal = 0;
+  for (const [dr, dc] of cardinal) {
+    if (isFilled(row + dr, col + dc)) blockedCardinal++;
+  }
+  if (!wasKicked && blockedCardinal < 3) {
+    if (debug) console.log('[T-Spin] Not immobile enough (non-kick)');
+    return { isTSpin: false, isMini: false };
+  }
+
   // 회전 방향 기준 앞쪽(front) 두 코너 점유로 mini/full 구분
   const frontCornersByRotation = {
     0: [[-1, -1], [-1, 1]],

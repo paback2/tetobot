@@ -70,6 +70,38 @@ function analyzeBoard(board) {
 }
 
 
+
+
+function getColumnTransitions(board) {
+  let transitions = 0;
+  for (let col = 0; col < 10; col++) {
+    let prevFilled = true; // top wall
+    for (let row = 0; row < 20; row++) {
+      const filled = board[row][col] !== 0;
+      if (filled !== prevFilled) transitions++;
+      prevFilled = filled;
+    }
+    if (!prevFilled) transitions++; // bottom wall
+  }
+  return transitions;
+}
+
+function getHoleDepthPenalty(board, heights) {
+  let penalty = 0;
+  for (let col = 0; col < 10; col++) {
+    const startRow = 20 - heights[col];
+    let cover = 0;
+    for (let row = startRow; row < 20; row++) {
+      if (board[row][col] !== 0) {
+        cover++;
+      } else {
+        penalty += cover;
+      }
+    }
+  }
+  return penalty;
+}
+
 const ACTION_SCORES = {
   none: 0,
   single: -80,
@@ -105,7 +137,9 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       height: -6,
       bumpiness: -4,
       variance: -8,
-      nearFullRows: 50
+      nearFullRows: 50,
+      colTransitions: -6,
+      holeDepthPenalty: -20,
     },
     cheese: {
       holes: -150,
@@ -113,7 +147,9 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       height: -8,
       bumpiness: -2,
       variance: -5,
-      nearFullRows: 100
+      nearFullRows: 100,
+      colTransitions: -4,
+      holeDepthPenalty: -26,
     },
     straight: {
       holes: -140,
@@ -121,7 +157,9 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       height: -7,
       bumpiness: -5,
       variance: -10,
-      nearFullRows: 80
+      nearFullRows: 80,
+      colTransitions: -7,
+      holeDepthPenalty: -22,
     },
     danger: {
       holes: -200,
@@ -129,7 +167,9 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       height: -10,
       bumpiness: -3,
       variance: -6,
-      nearFullRows: 150
+      nearFullRows: 150,
+      colTransitions: -5,
+      holeDepthPenalty: -30,
     }
   };
   
@@ -142,6 +182,11 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   score += analysis.bumpiness * w.bumpiness;
   score += analysis.variance * w.variance;
   score += analysis.nearFullRows * w.nearFullRows;
+
+  const colTransitions = getColumnTransitions(board);
+  const holeDepthPenalty = getHoleDepthPenalty(board, analysis.heights);
+  score += colTransitions * (w.colTransitions ?? -5);
+  score += holeDepthPenalty * (w.holeDepthPenalty ?? -20);
   
   // 우물 잠재력 보너스 (높음 = 좋음)
   score += analysis.wellPotential * 2;

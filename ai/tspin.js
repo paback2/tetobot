@@ -10,18 +10,20 @@ import { canPlace } from '../game/board.js';
  * @param {number} col - T-피스 배치 열
  * @param {number} rotation - T-피스 회전 상태 (0-3)
  * @param {boolean} wasKicked - 이 배치가 킥된 회전 결과인지 여부
+ * @param {boolean} wasRotated - 마지막 동작이 회전인지 여부
  * @param {boolean} debug - 디버그 모드 (로깅 활성화)
  * @returns {{isTSpin: boolean, isMini: boolean}} T-Spin 여부 및 미니 여부
  */
-export function checkTSpin(board, row, col, rotation, wasKicked = false, cleared = 0, kickIndex = 0, debug = false) {
-  // 반드시 마지막 동작이 SRS 킥(회전)이었고, 실제로 킥이 발생(kickIndex > 0)해야만 T-Spin 인정
-  if (!wasKicked || kickIndex === 0) {
-    if (debug) console.log('[T-Spin] No SRS kick or no actual kick, not a T-Spin');
+export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, debug = false) {
+  // 가이드라인 기준: "마지막 입력이 회전"이면 T-Spin 가능.
+  // 실제 킥이 없더라도(킥 인덱스 0) T-Spin 자체는 성립할 수 있다.
+  if (!wasRotated) {
+    if (debug) console.log('[T-Spin] Last action was not a rotation, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }
 
-  // 보드 가장자리(왼쪽/오른쪽)에서의 잘못된 판정 방지: 벽에 flush된 상태에서 킥이 없으면 무조건 T-Spin 불가
-  if ((col <= 0 || col >= 8) && kickIndex <= 1) {
+  // 가장자리 오탐 방지: 가장자리에서 회전 + 코너 규칙이 약하면 배제
+  if ((col <= 0 || col >= 8) && !wasKicked && kickIndex === 0) {
     if (debug) console.log('[T-Spin] Edge position with no real kick, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }
@@ -40,7 +42,7 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, cleared
     return { isTSpin: false, isMini: false };
   }
 
-  // mini/full 구분: cold-clear-2/cobra-tetrio-movegen 스타일
+  // mini/full 구분
   // 4번째 킥(특수 SRS)은 무조건 Full
   if (kickIndex === 4) return { isTSpin: true, isMini: false };
 
@@ -64,7 +66,7 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, cleared
   }
 
   // mini는 1,2번 킥(미니킥) + 앞쪽 2코너 모두 막힘
-  if ((kickIndex === 1 || kickIndex === 2) && miniOccupied === 2) {
+  if (wasKicked && (kickIndex === 1 || kickIndex === 2) && miniOccupied === 2) {
     return { isTSpin: true, isMini: true };
   }
   // 나머지는 모두 Full
@@ -148,7 +150,7 @@ export function findTSpinCandidates(board, allMoves) {
     const { rotation, row, col, kicked } = move;
     
     // T-Spin 확인
-    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked);
+    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0);
     
     if (isTSpin) {
       const isFin = detectTSpinFin(board, row, col, rotation);
@@ -163,4 +165,3 @@ export function findTSpinCandidates(board, allMoves) {
 
   return candidates;
 }
-

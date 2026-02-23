@@ -57,17 +57,17 @@ console.log("\n--- T-Spin 체크 (올바른 중심 좌표) ---");
 // 회전 1의 중심은 (row+1, col) = (17, 4)
 
 console.log("회전 1 (중심: 17, 4):");
-const result1Correct = checkTSpin(board, 17, 4, 1, false);
+const result1Correct = checkTSpin(board, 17, 4, 1, false, true, 0);
 console.log("결과:", result1Correct);
 
 console.log("\n회전 1 킥됨 (중심: 17, 4):");
-const result1KickedCorrect = checkTSpin(board, 17, 4, 1, true);
+const result1KickedCorrect = checkTSpin(board, 17, 4, 1, true, true, 1);
 console.log("결과:", result1KickedCorrect);
 
 // 회전 0: [[0,1,0], [1,1,1]]로 테스트
 // row=17, col=4에 배치되면 중심은 (row+1, col+1) = (18, 5)
 
 console.log("\n회전 0 (중심: 18, 5):");
-const result0Correct = checkTSpin(board, 18, 5, 0, false);
+const result0Correct = checkTSpin(board, 18, 5, 0, false, false, 0);
 console.log("결과:", result0Correct);
 

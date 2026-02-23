@@ -229,6 +229,16 @@ function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = f
         return { isTSpin: false, isMini: false };
     }
 
+    // 일반 싱글/더블/트리플 오탐 방지: 줄을 지우지 않았다면 T-Spin 점수로 취급하지 않는다.
+    if (cleared <= 0) {
+        return { isTSpin: false, isMini: false };
+    }
+
+    // 라인 클리어가 난 T-Spin은 킥 회전이 확인된 경우에만 인정한다.
+    if (!wasKicked) {
+        return { isTSpin: false, isMini: false };
+    }
+
     const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
 
     const tl = isFilled(row - 1, col - 1);

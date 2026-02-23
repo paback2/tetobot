@@ -14,14 +14,13 @@ function isPerfectClear(board) {
 
 function getTCenter(row, col, rotation) {
   switch (rotation) {
-    case 0:
-      return { centerR: row + 1, centerC: col + 1 };
     case 1:
       return { centerR: row + 1, centerC: col };
     case 2:
       return { centerR: row, centerC: col + 1 };
     case 3:
-      return { centerR: row, centerC: col };
+      return { centerR: row + 1, centerC: col + 1 };
+    case 0:
     default:
       return { centerR: row + 1, centerC: col + 1 };
   }
@@ -33,6 +32,21 @@ function findAllMovePositions(board, pieceType) {
   const seen = new Set();
 
   if (pieceType === 'T') {
+    const addOrReplaceMove = (move) => {
+      const existingIndex = allMoves.findIndex(
+        (existing) => existing.rotation === move.rotation && existing.col === move.col && existing.row === move.row
+      );
+
+      if (existingIndex !== -1) {
+        if (!move.wasRotated && allMoves[existingIndex].wasRotated) {
+          allMoves[existingIndex] = move;
+        }
+        return;
+      }
+
+      allMoves.push(move);
+    };
+
     for (let fromRot = 0; fromRot < 4; fromRot++) {
       const piece = rotations[fromRot];
       for (let col = -2; col < 10; col++) {
@@ -40,19 +54,15 @@ function findAllMovePositions(board, pieceType) {
         if (dropRow === -1) continue;
 
         // 직접 하드드롭 (회전 없음)
-        const dropKey = `${fromRot}-${col}-${dropRow}`;
-        if (!seen.has(dropKey)) {
-          seen.add(dropKey);
-          allMoves.push({
-            rotation: fromRot,
-            row: dropRow,
-            col,
-            piece,
-            wasRotated: false,
-            wasKicked: false,
-            kickIndex: 0,
-          });
-        }
+        addOrReplaceMove({
+          rotation: fromRot,
+          row: dropRow,
+          col,
+          piece,
+          wasRotated: false,
+          wasKicked: false,
+          kickIndex: 0,
+        });
 
         // 마지막 입력이 회전인 케이스 (킥 포함)
         for (let toRot = 0; toRot < 4; toRot++) {
@@ -61,19 +71,15 @@ function findAllMovePositions(board, pieceType) {
           const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
           if (!rotResult) continue;
 
-          const key = `${toRot}-${rotResult.col}-${rotResult.row}-${fromRot}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            allMoves.push({
-              rotation: toRot,
-              row: rotResult.row,
-              col: rotResult.col,
-              piece: nextPiece,
-              wasRotated: true,
-              wasKicked: rotResult.kicked,
-              kickIndex: rotResult.kickIndex,
-            });
-          }
+          addOrReplaceMove({
+            rotation: toRot,
+            row: rotResult.row,
+            col: rotResult.col,
+            piece: nextPiece,
+            wasRotated: true,
+            wasKicked: rotResult.kicked,
+            kickIndex: rotResult.kickIndex,
+          });
         }
       }
     }
@@ -120,9 +126,9 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
     let isMini = false;
     let extraBonus = 0;
 
-    if (pieceType === 'T' && cleared > 0) {
+    if (pieceType === 'T' && cleared > 0 && wasRotated) {
       const { centerR, centerC } = getTCenter(row, col, rotation);
-      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex);
+      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, true, kickIndex, cleared);
       if (tspinResult.isTSpin) {
         isTSpin = true;
         isMini = tspinResult.isMini;
@@ -178,10 +184,21 @@ function actionPriority(action) {
   if (action === 'pc' || action.includes('_pc')) return 100;
   if (action === 'tsd') return 80;
   if (action === 'tst') return 75;
-  if (action === 'tss') return 60;
-  if (action === 'tsm') return 50;
+  if (action === 'tss') return 58;
+  if (action === 'tsm_double') return 62;
+  if (action === 'tsm') return 45;
   if (action === 'tetris') return 40;
   return 0;
+}
+
+
+function sortForSpecialPath(candidates) {
+  return [...candidates].sort((a, b) => {
+    const pa = actionPriority(a.action);
+    const pb = actionPriority(b.action);
+    if (pb !== pa) return pb - pa;
+    return b.score - a.score;
+  });
 }
 
 function findBestMoveRecursive(board, pieces, isB2B, mode, depth = 0) {
@@ -222,7 +239,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   const currentPiece = pieces[0];
   const options = [];
 
-  const noHoldMoves = _findMovesForPiece(board, currentPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+  const noHoldMoves = sortForSpecialPath(_findMovesForPiece(board, currentPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
   for (const candidate of noHoldMoves) {
     options.push({
       ...candidate,
@@ -245,7 +262,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
 
   // 홀드 박스에 피스가 있는 경우
   if (heldPiece !== null) {
-    const holdMoves = _findMovesForPiece(board, heldPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+    const holdMoves = sortForSpecialPath(_findMovesForPiece(board, heldPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
     for (const candidate of holdMoves) {
       options.push({
         ...candidate,
@@ -267,7 +284,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   } else if (pieces.length > 1) {
     // 홀드 박스가 비어있으면 다음 피스를 현재 턴에 사용
     const nextPiece = pieces[1];
-    const nextPieceMoves = _findMovesForPiece(board, nextPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+    const nextPieceMoves = sortForSpecialPath(_findMovesForPiece(board, nextPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
     for (const candidate of nextPieceMoves) {
       options.push({
         ...candidate,

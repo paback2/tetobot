@@ -14,14 +14,12 @@ function isPerfectClear(board) {
 
 function getTCenter(row, col, rotation) {
   switch (rotation) {
-    case 0:
-      return { centerR: row + 1, centerC: col + 1 };
     case 1:
       return { centerR: row + 1, centerC: col };
-    case 2:
-      return { centerR: row, centerC: col + 1 };
     case 3:
-      return { centerR: row, centerC: col };
+      return { centerR: row + 1, centerC: col + 1 };
+    case 0:
+    case 2:
     default:
       return { centerR: row + 1, centerC: col + 1 };
   }

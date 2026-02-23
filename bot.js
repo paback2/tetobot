@@ -57,8 +57,7 @@ class GameState {
       this.currentPiece = newCurrent;
     }
 
-    // pieceQueue에서 currentPiece와 heldPiece와 같은 모든 항목 제거 (중복/유령 미노 방지)
-    this.pieceQueue = this.pieceQueue.filter(p => p !== this.currentPiece && p !== this.heldPiece);
+    // 7-bag 순서를 깨지 않도록 큐는 그대로 유지한다.
 
     this.canHold = false; // 이 턴에서 홀드 사용 완료
     return true;
@@ -80,9 +79,8 @@ class GameState {
       return null;
     }
 
-    // currentPiece, heldPiece가 pieceQueue에 중복 포함되지 않도록 보장
-    const filteredQueue = this.pieceQueue.filter(p => p !== this.currentPiece && p !== this.heldPiece);
-    const pieces = [this.currentPiece, ...filteredQueue];
+    // 7-bag 보존: queue는 있는 그대로 탐색에 사용
+    const pieces = [this.currentPiece, ...this.pieceQueue];
     const mode = detectMode(this.board);
 
     // cold-clear-2/cobra-tetrio-movegen 스타일: hold, perfect clear, tspin, beam/depth 모두 지원

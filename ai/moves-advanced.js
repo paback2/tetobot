@@ -167,22 +167,16 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
       // cold-clear-2/cobra-tetrio-movegen 방식: 회전 상태별 중심 좌표 정확 계산
       let centerR, centerC;
       switch (rotation) {
-        case 0:
-          centerR = row + 1;
-          centerC = col + 1;
-          break;
         case 1:
           centerR = row + 1;
           centerC = col;
           break;
-        case 2:
-          centerR = row;
+        case 3:
+          centerR = row + 1;
           centerC = col + 1;
           break;
-        case 3:
-          centerR = row;
-          centerC = col;
-          break;
+        case 0:
+        case 2:
         default:
           centerR = row + 1;
           centerC = col + 1;

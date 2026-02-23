@@ -31,106 +31,108 @@ function getTCenter(row, col, rotation) {
 
 function findAllMovePositions(board, pieceType) {
   const rotations = PIECES[pieceType];
+  if (!rotations || rotations.length === 0) return [];
+
   const allMoves = [];
-  const seen = new Set();
+  const lockSeen = new Set();
 
-  if (pieceType === 'T') {
-    for (let startRot = 0; startRot < 4; startRot++) {
-      const startPiece = rotations[startRot];
-      for (let col = -2; col < 10; col++) {
-        const startRow = dropRowOn(board, startPiece, col);
-        if (startRow === -1) continue;
+  // Cold Clear/Cobra 계열처럼 스폰 상태에서 도달 가능한 상태 그래프를 탐색한다.
+  // (현재 구현은 softdrop 기반 BFS로 reachable lock만 수집)
+  const spawn = { row: 0, col: 3, rotation: 0, wasRotated: false, wasKicked: false, kickIndex: 0 };
+  if (!canPlace(board, rotations[spawn.rotation], spawn.row, spawn.col)) {
+    return [];
+  }
 
-        // 바닥에 닿아 있는 상태에서 연속 회전(최대 2회)까지 탐색해
-        // SRS 킥으로 들어가는 T-Spin 슬롯 후보를 놓치지 않도록 한다.
-        const queue = [{
-          rotation: startRot,
-          row: startRow,
-          col,
-          wasRotated: false,
-          wasKicked: false,
-          kickIndex: 0,
-          depth: 0,
-        }];
-        const localSeen = new Set([`${startRot}-${col}-${startRow}`]);
+  const queue = [spawn];
+  const visited = new Set([`${spawn.row}:${spawn.col}:${spawn.rotation}:${spawn.wasRotated ? 1 : 0}`]);
 
-        while (queue.length > 0) {
-          const state = queue.shift();
-          const key = `${state.rotation}-${state.col}-${state.row}-${state.wasRotated ? 1 : 0}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            allMoves.push({
-              rotation: state.rotation,
-              row: state.row,
-              col: state.col,
-              piece: rotations[state.rotation],
-              wasRotated: state.wasRotated,
-              wasKicked: state.wasKicked,
-              kickIndex: state.kickIndex,
-            });
-          }
+  const pushState = (state) => {
+    const key = `${state.row}:${state.col}:${state.rotation}:${state.wasRotated ? 1 : 0}`;
+    if (visited.has(key)) return;
+    visited.add(key);
+    queue.push(state);
+  };
 
-          if (state.depth >= 2) continue;
+  while (queue.length > 0) {
+    const state = queue.shift();
+    const piece = rotations[state.rotation];
 
-          for (let toRot = 0; toRot < 4; toRot++) {
-            if (toRot === state.rotation) continue;
-            const rotResult = attemptRotation(
-              board,
-              rotations[state.rotation],
-              rotations[toRot],
-              state.row,
-              state.col,
-              'T',
-              state.rotation,
-              toRot,
-            );
-            if (!rotResult) continue;
-
-            const localKey = `${toRot}-${rotResult.col}-${rotResult.row}`;
-            if (localSeen.has(localKey)) continue;
-            localSeen.add(localKey);
-
-            queue.push({
-              rotation: toRot,
-              row: rotResult.row,
-              col: rotResult.col,
-              wasRotated: true,
-              wasKicked: rotResult.kicked,
-              kickIndex: rotResult.kickIndex,
-              depth: state.depth + 1,
-            });
-          }
-        }
+    // 현재 상태에서 하드드롭한 lock 위치 추가
+    const lockRow = dropRowOn(board, piece, state.col);
+    if (lockRow !== -1) {
+      const lockKey = `${state.rotation}:${state.col}:${lockRow}:${state.wasRotated ? 1 : 0}:${state.kickIndex}`;
+      if (!lockSeen.has(lockKey)) {
+        lockSeen.add(lockKey);
+        allMoves.push({
+          rotation: state.rotation,
+          row: lockRow,
+          col: state.col,
+          piece,
+          wasRotated: state.wasRotated,
+          wasKicked: state.wasKicked,
+          kickIndex: state.kickIndex,
+        });
       }
     }
 
-    return allMoves;
-  }
+    // Soft drop
+    if (canPlace(board, piece, state.row + 1, state.col)) {
+      pushState({
+        row: state.row + 1,
+        col: state.col,
+        rotation: state.rotation,
+        wasRotated: false,
+        wasKicked: false,
+        kickIndex: 0,
+      });
+    }
 
-  for (let rot = 0; rot < rotations.length; rot++) {
-    const piece = rotations[rot];
-    for (let col = -2; col < 10; col++) {
-      const row = dropRowOn(board, piece, col);
-      if (row !== -1 && canPlace(board, piece, row, col)) {
-        const key = `${rot}-${col}-${row}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          allMoves.push({
-            rotation: rot,
-            row,
-            col,
-            piece,
-            wasRotated: false,
-            wasKicked: false,
-            kickIndex: 0,
-          });
-        }
+    // Shift left/right
+    for (const dc of [-1, 1]) {
+      const newCol = state.col + dc;
+      if (canPlace(board, piece, state.row, newCol)) {
+        pushState({
+          row: state.row,
+          col: newCol,
+          rotation: state.rotation,
+          wasRotated: false,
+          wasKicked: false,
+          kickIndex: 0,
+        });
+      }
+    }
+
+    // Rotate CW / CCW
+    if (rotations.length > 1 && pieceType !== 'O') {
+      const nextRot = (state.rotation + 1) % rotations.length;
+      const prevRot = (state.rotation - 1 + rotations.length) % rotations.length;
+      for (const toRot of new Set([nextRot, prevRot])) {
+        const rotResult = attemptRotation(
+          board,
+          piece,
+          rotations[toRot],
+          state.row,
+          state.col,
+          pieceType,
+          state.rotation,
+          toRot,
+        );
+        if (!rotResult) continue;
+        pushState({
+          row: rotResult.row,
+          col: rotResult.col,
+          rotation: toRot,
+          wasRotated: true,
+          wasKicked: rotResult.kicked,
+          kickIndex: rotResult.kickIndex,
+        });
       }
     }
   }
 
   return allMoves;
 }
+
 
 function _findMovesForPiece(board, pieceType, isB2B, mode) {
   const pieceMoves = findAllMovePositions(board, pieceType);

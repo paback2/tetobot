@@ -16,6 +16,31 @@ const PERFECT_CLEAR_BEAM = 42;       // PC 전용 빔 너비
 const TSPIN_DEPTH = 7;               // T-Spin 전용 깊이
 const TSPIN_BEAM = 24;               // T-Spin 전용 빔
 
+function getDynamicSearchConfig(pieceCount) {
+  const remaining = Math.max(0, pieceCount);
+  if (remaining >= 10) {
+    return { depth: Math.min(8, BASE_LOOKAHEAD_DEPTH + 1), beam: Math.max(BASE_BEAM_WIDTH, 32) };
+  }
+  if (remaining >= 7) {
+    return { depth: BASE_LOOKAHEAD_DEPTH, beam: BASE_BEAM_WIDTH };
+  }
+  if (remaining >= 4) {
+    return { depth: 5, beam: 20 };
+  }
+  return { depth: 4, beam: 14 };
+}
+
+function actionPriorityBoost(action) {
+  if (!action) return 0;
+  if (action === 'pc' || action.includes('_pc')) return 120000;
+  if (action === 'tsd' || action === 'tsd_pc') return 18000;
+  if (action === 'tst' || action === 'tst_pc') return 14000;
+  if (action === 'tss' || action === 'tss_pc') return 9000;
+  if (action === 'tsm' || action === 'tsm_pc') return 6000;
+  if (action === 'tetris' || action === 'tetris_pc') return 5000;
+  return 0;
+}
+
 // 게임 상태를 문자열로 인코딩 (Memoization용)
 function boardToKey(board) {
   return board.map(row => 
@@ -36,31 +61,60 @@ function findAllMovePositions(board, pieceType) {
   const seen = new Set();
 
   if (pieceType === 'T') {
+    const addOrReplaceMove = (move) => {
+      const key = `${move.rotation}-${move.col}-${move.row}`;
+      const existingIndex = allMoves.findIndex(
+        (existing) => existing.rotation === move.rotation && existing.col === move.col && existing.row === move.row
+      );
+
+      // 동일 최종 배치가 회전/비회전 둘 다 가능한 경우,
+      // 마지막 입력이 회전이라는 보장이 없는 경로를 우선해 T-Spin 오탐을 방지한다.
+      if (existingIndex !== -1) {
+        if (!move.wasRotated && allMoves[existingIndex].wasRotated) {
+          allMoves[existingIndex] = move;
+        }
+        return;
+      }
+
+      seen.add(key);
+      allMoves.push(move);
+    };
+
     // Cold Clear 2 방식: 모든 회전/킥 배치 시뮬레이션
     for (let fromRot = 0; fromRot < 4; fromRot++) {
       const piece = rotations[fromRot];
       for (let col = -2; col < 10; col++) {
         const dropRow = dropRowOn(board, piece, col);
         if (dropRow === -1) continue;
+
         // 각 회전 방향으로 SRS 킥 시도
         for (let toRot = 0; toRot < 4; toRot++) {
           if (toRot === fromRot) continue;
           const nextPiece = rotations[toRot];
           const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
-          if (rotResult) {
-            const key = `${toRot}-${rotResult.col}-${rotResult.row}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              allMoves.push({ rotation: toRot, row: rotResult.row, col: rotResult.col, piece: nextPiece, wasKicked: rotResult.kicked, kickIndex: rotResult.kickIndex });
-            }
-          }
+          if (!rotResult) continue;
+
+          addOrReplaceMove({
+            rotation: toRot,
+            row: rotResult.row,
+            col: rotResult.col,
+            piece: nextPiece,
+            wasRotated: true,
+            wasKicked: rotResult.kicked,
+            kickIndex: rotResult.kickIndex,
+          });
         }
-        // 회전 없이 그냥 놓는 경우도 추가 (wasKicked: false)
-        const key = `${fromRot}-${col}-${dropRow}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          allMoves.push({ rotation: fromRot, row: dropRow, col, piece, wasKicked: false, kickIndex: 0 });
-        }
+
+        // 회전 없이 그냥 놓는 경우도 추가
+        addOrReplaceMove({
+          rotation: fromRot,
+          row: dropRow,
+          col,
+          piece,
+          wasRotated: false,
+          wasKicked: false,
+          kickIndex: 0,
+        });
       }
     }
   } else {
@@ -74,7 +128,15 @@ function findAllMovePositions(board, pieceType) {
             const key = `${rot}-${col}-${row}`;
             if (!seen.has(key)) {
               seen.add(key);
-              allMoves.push({ rotation: rot, row, col, piece });
+              allMoves.push({
+                rotation: rot,
+                row,
+                col,
+                piece,
+                wasRotated: false,
+                wasKicked: false,
+                kickIndex: 0,
+              });
             }
           }
         }
@@ -90,7 +152,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
   const scoredMoves = [];
 
   for (const move of pieceMoves) {
-    const { rotation, row, col, piece, wasKicked, kickIndex } = move;
+    const { rotation, row, col, piece, wasKicked, wasRotated, kickIndex } = move;
     const boardWithPiece = placePiece(board, piece, row, col);
     const { board: clearedBoard, cleared } = clearLines(boardWithPiece);
 
@@ -125,8 +187,15 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
           centerC = col + 1;
       }
 
-      const wasRotated = wasKicked || rotation !== 0;
-      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex || 0);
+      const tspinResult = checkTSpin(
+        boardWithPiece,
+        centerR,
+        centerC,
+        rotation,
+        wasKicked,
+        wasRotated,
+        kickIndex || 0
+      );
       if (tspinResult.isTSpin) {
         isTSpin = true;
         isMini = tspinResult.isMini;
@@ -239,7 +308,7 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
   }
 
   // Beam search: 상위 K개만 재귀 탐색 (초반은 넓게, 후반은 집중)
-  const depthBeamWidth = Math.max(8, Math.floor(beamWidth - depth * 3));
+  const depthBeamWidth = Math.max(10, Math.floor(beamWidth * (depth < 2 ? 1 : 0.82) - depth * 2));
   const candidates = moves.slice(0, Math.min(depthBeamWidth, moves.length));
   
   let bestScore = -Infinity;
@@ -271,7 +340,10 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
       beamWidth
     );
 
-    const totalScore = candidate.score * 0.55 + futureResult.score * 0.95;
+    const depthWeight = depth === 0 ? 0.6 : 0.52;
+    const futureWeight = depth === 0 ? 1.0 : 0.92;
+    const tacticalBoost = actionPriorityBoost(candidate.action);
+    const totalScore = candidate.score * depthWeight + futureResult.score * futureWeight + tacticalBoost;
 
     if (totalScore > bestScore) {
       bestScore = totalScore;
@@ -360,14 +432,15 @@ export function findBestMoveAdvanced(board, pieces, isB2B, mode) {
   }
 
   // 3. 일반 Deep Beam Search
+  const dynamicConfig = getDynamicSearchConfig(pieces.length);
   const result = deepBeamSearch(
     board,
     pieces,
     isB2B,
     mode,
     0,
-    BASE_LOOKAHEAD_DEPTH,
-    BASE_BEAM_WIDTH
+    dynamicConfig.depth,
+    dynamicConfig.beam
   );
 
   if (!result || !result.move) {

@@ -87,10 +87,11 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   }
 
   // Mini/Full 분기 (오탐 억제 우선):
-  // - 2줄 이상은 킥 회전(또는 test-5)인 경우에만 Full로 인정
+  // - 2줄 이상은 "강한" 스핀 증거(테스트5 또는 킥+앞코너 2개)에서만 Full
   // - 1줄은 기본 Mini, test-5만 Full Single
   if (cleared >= 2) {
-    if (!wasKicked && kickIndex !== 4) {
+    const strongFull = kickIndex === 4 || (wasKicked && frontOccupied === 2 && blockedCardinal >= 3);
+    if (!strongFull) {
       return { isTSpin: false, isMini: false };
     }
     return { isTSpin: true, isMini: false };
@@ -100,6 +101,7 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     if (kickIndex === 4) {
       return { isTSpin: true, isMini: false };
     }
+    // 단일 클리어는 Mini 우선 (요청된 오분류 방지)
     return { isTSpin: true, isMini: true };
   }
 
@@ -123,7 +125,7 @@ export function getTSpinAction(isTSpin, isMini, cleared) {
     switch (cleared) {
       case 0: return 'tsmzero';  // Mini 0-clear
       case 1: return 'tsm';       // Mini Single
-      case 2: return 'tsd';       // Mini Double은 별도 분류하지 않고 Full Double로 처리
+      case 2: return 'double';    // Mini Double은 규칙상 미사용: 일반 더블로 안전 처리
       default: return 'tsm';
     }
   }

@@ -14,64 +14,61 @@ import { canPlace } from '../game/board.js';
  * @param {boolean} debug - 디버그 모드 (로깅 활성화)
  * @returns {{isTSpin: boolean, isMini: boolean}} T-Spin 여부 및 미니 여부
  */
-export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, debug = false) {
-  // 가이드라인 기준: "마지막 입력이 회전"이면 T-Spin 가능.
-  // 실제 킥이 없더라도(킥 인덱스 0) T-Spin 자체는 성립할 수 있다.
+export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, cleared = 0, debug = false) {
+  // Guideline 기본 조건: 마지막 입력이 회전이어야 한다.
   if (!wasRotated) {
     if (debug) console.log('[T-Spin] Last action was not a rotation, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }
 
-  // 가장자리 오탐 방지: 가장자리에서 회전 + 코너 규칙이 약하면 배제
-  if ((col <= 0 || col >= 8) && !wasKicked && kickIndex === 0) {
-    if (debug) console.log('[T-Spin] Edge position with no real kick, not a T-Spin');
-    return { isTSpin: false, isMini: false };
-  }
-
-  // 4개 대각선 코너
   const corners = [
     [-1, -1], [1, -1], [-1, 1], [1, 1]
   ];
   const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
+
   let occupied = 0;
   for (const [dx, dy] of corners) {
     if (isFilled(row + dx, col + dy)) occupied++;
   }
+
   if (occupied < 3) {
     if (debug) console.log('[T-Spin] Less than 3 corners, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }
 
-  // mini/full 구분
-  // 4번째 킥(특수 SRS)은 무조건 Full
-  if (kickIndex === 4) return { isTSpin: true, isMini: false };
+  // 회전 방향 기준 앞쪽(front) 두 코너 점유로 mini/full 구분
+  const frontCornersByRotation = {
+    0: [[-1, -1], [-1, 1]],
+    1: [[-1, 1], [1, 1]],
+    2: [[1, -1], [1, 1]],
+    3: [[-1, -1], [1, -1]],
+  };
 
-  // SRS 미니 킥(1, 2번 킥)만 mini 허용, 0번(중심), 3번(축 이동)은 Full
-  // mini 코너(회전 방향 기준 앞쪽 2개)
-  function rotateCorner([dx, dy], rot) {
-    switch (rot) {
-      case 0: return [dx, dy];
-      case 1: return [dy, -dx];
-      case 2: return [-dx, -dy];
-      case 3: return [-dy, dx];
-    }
-  }
-  const miniCorners = [
-    rotateCorner([-1, 1], rotation),
-    rotateCorner([1, 1], rotation)
-  ];
-  let miniOccupied = 0;
-  for (const [dx, dy] of miniCorners) {
-    if (isFilled(row + dx, col + dy)) miniOccupied++;
+  const frontCorners = frontCornersByRotation[rotation] || frontCornersByRotation[0];
+  let frontOccupied = 0;
+  for (const [dx, dy] of frontCorners) {
+    if (isFilled(row + dx, col + dy)) frontOccupied++;
   }
 
-  // mini는 1,2번 킥(미니킥) + 앞쪽 2코너 모두 막힘
-  if (wasKicked && (kickIndex === 1 || kickIndex === 2) && miniOccupied === 2) {
+  // SRS test-5는 Full 처리
+  if (kickIndex === 4) {
+    return { isTSpin: true, isMini: false };
+  }
+
+  // 라인을 2줄 이상 지운 T-Spin은 Full로 본다 (가이드라인 실전 룰에 맞춤)
+  if (cleared >= 2) {
+    return { isTSpin: true, isMini: false };
+  }
+
+  // SRS 1/2 킥은 Mini 성격이 강하다.
+  if (wasKicked && (kickIndex === 1 || kickIndex === 2)) {
     return { isTSpin: true, isMini: true };
   }
-  // 나머지는 모두 Full
-  return { isTSpin: true, isMini: false };
+
+  // 기본 front-corner 규칙: 앞쪽 두 코너 중 하나라도 비면 Mini
+  return { isTSpin: true, isMini: frontOccupied < 2 };
 }
+
 
 /**
  * T-Spin 액션 결정
@@ -150,7 +147,7 @@ export function findTSpinCandidates(board, allMoves) {
     const { rotation, row, col, kicked } = move;
     
     // T-Spin 확인
-    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0);
+    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0, 0);
     
     if (isTSpin) {
       const isFin = detectTSpinFin(board, row, col, rotation);

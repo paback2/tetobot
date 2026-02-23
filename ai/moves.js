@@ -21,7 +21,6 @@ function getTCenter(row, col, rotation) {
     case 3:
       return { centerR: row + 1, centerC: col + 1 };
     case 0:
-    case 2:
     default:
       return { centerR: row + 1, centerC: col + 1 };
   }
@@ -160,9 +159,9 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
     let isMini = false;
     let extraBonus = 0;
 
-    if (pieceType === 'T' && cleared > 0) {
+    if (pieceType === 'T' && cleared > 0 && wasRotated && wasKicked) {
       const { centerR, centerC } = getTCenter(row, col, rotation);
-      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex);
+      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, true, kickIndex);
       if (tspinResult.isTSpin) {
         isTSpin = true;
         isMini = tspinResult.isMini;

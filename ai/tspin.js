@@ -15,9 +15,9 @@ import { canPlace } from '../game/board.js';
  * @returns {{isTSpin: boolean, isMini: boolean}} T-Spin 여부 및 미니 여부
  */
 export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, debug = false) {
-  // 가이드라인 기준: "마지막 입력이 회전"이면 T-Spin 가능.
-  // 실제 킥이 없더라도(킥 인덱스 0) T-Spin 자체는 성립할 수 있다.
-  if (!wasRotated) {
+  // Cold Clear/Cobra 계열 movegen에서는 T-Spin 후보를 회전+킥 기반으로 추적한다.
+  // 여기서는 오탐 방지를 위해 "마지막 입력이 회전" + "실제 킥 발생"을 모두 요구한다.
+  if (!wasRotated || !wasKicked) {
     if (debug) console.log('[T-Spin] Last action was not a rotation, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }

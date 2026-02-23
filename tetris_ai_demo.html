@@ -225,55 +225,35 @@ function dropRowOn(board, piece, col) {
 
 // --- From ai/tspin.js - Cold Clear 2 Algorithm ---
 function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0) {
-    // 오탐 방지를 위해 마지막 동작 회전 + 실제 킥을 모두 요구
-    if (!wasRotated || !wasKicked) {
+    // Guideline 핵심: 마지막 동작이 회전이어야 함
+    if (!wasRotated) {
         return { isTSpin: false, isMini: false };
     }
 
     const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
 
     // 3-corner rule
-    const corners = [
-        [row - 1, col - 1], [row - 1, col + 1],
-        [row + 1, col - 1], [row + 1, col + 1]
-    ];
-    const filledCorners = corners.filter(([r, c]) => isFilled(r, c)).length;
-    if (filledCorners < 3) {
-        return { isTSpin: false, isMini: false };
-    }
-
-    // 특수 5번째 킥은 Full
-    if (kickIndex === 4) {
-        return { isTSpin: true, isMini: false };
-    }
-
     const tl = isFilled(row - 1, col - 1);
     const tr = isFilled(row - 1, col + 1);
     const bl = isFilled(row + 1, col - 1);
     const br = isFilled(row + 1, col + 1);
-
-    // T가 바라보는 방향(front) / 반대(back) 코너 2개
-    let frontA = false, frontB = false;
-    let backA = false, backB = false;
-    if (rotation === 0) { frontA = tl; frontB = tr; backA = bl; backB = br; }
-    else if (rotation === 1) { frontA = tr; frontB = br; backA = tl; backB = bl; }
-    else if (rotation === 2) { frontA = bl; frontB = br; backA = tl; backB = tr; }
-    else { frontA = tl; frontB = bl; backA = tr; backB = br; }
-
-    if (!(backA && backB)) {
+    const filledCorners = [tl, tr, bl, br].filter(Boolean).length;
+    if (filledCorners < 3) {
         return { isTSpin: false, isMini: false };
     }
 
-    if (kickIndex === 3 || kickIndex === 4) {
+    let frontA = false, frontB = false;
+    if (rotation === 0) { frontA = tl; frontB = tr; }
+    else if (rotation === 1) { frontA = tr; frontB = br; }
+    else if (rotation === 2) { frontA = bl; frontB = br; }
+    else { frontA = tl; frontB = bl; }
+
+    if (kickIndex === 4) {
         return { isTSpin: true, isMini: false };
     }
 
-    const miniByCorners = !(frontA && frontB);
-    if (miniByCorners && (kickIndex === 1 || kickIndex === 2)) {
-        return { isTSpin: true, isMini: true };
-    }
-
-    return { isTSpin: true, isMini: false };
+    const isMini = !(frontA && frontB);
+    return { isTSpin: true, isMini };
 }
 function getTSpinAction(isTSpin, isMini, cleared) {
     if (!isTSpin) return 'none';

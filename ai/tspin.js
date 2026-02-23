@@ -61,12 +61,6 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: true };
   }
 
-  // 무킥 회전(0번)은 구현/경로 추론상 Full 오탐이 잦아 Mini 쪽으로 보수 처리한다.
-  // Full Single을 일부 포기하더라도 Mini->Single 오판을 줄이는 것이 우선이다.
-  if (!wasKicked && kickIndex === 0) {
-    return { isTSpin: true, isMini: true };
-  }
-
   // 그 외는 front corner 우선 규칙
   const isMini = frontOccupied < 2;
   return { isTSpin: true, isMini };

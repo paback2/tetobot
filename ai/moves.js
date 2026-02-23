@@ -33,45 +33,69 @@ function findAllMovePositions(board, pieceType) {
   const seen = new Set();
 
   if (pieceType === 'T') {
-    for (let fromRot = 0; fromRot < 4; fromRot++) {
-      const piece = rotations[fromRot];
+    for (let startRot = 0; startRot < 4; startRot++) {
+      const startPiece = rotations[startRot];
       for (let col = -2; col < 10; col++) {
-        const dropRow = dropRowOn(board, piece, col);
-        if (dropRow === -1) continue;
+        const startRow = dropRowOn(board, startPiece, col);
+        if (startRow === -1) continue;
 
-        // 직접 하드드롭 (회전 없음)
-        const dropKey = `${fromRot}-${col}-${dropRow}`;
-        if (!seen.has(dropKey)) {
-          seen.add(dropKey);
-          allMoves.push({
-            rotation: fromRot,
-            row: dropRow,
-            col,
-            piece,
-            wasRotated: false,
-            wasKicked: false,
-            kickIndex: 0,
-          });
-        }
+        // 바닥에 닿아 있는 상태에서 연속 회전(최대 2회)까지 탐색해
+        // SRS 킥으로 들어가는 T-Spin 슬롯 후보를 놓치지 않도록 한다.
+        const queue = [{
+          rotation: startRot,
+          row: startRow,
+          col,
+          wasRotated: false,
+          wasKicked: false,
+          kickIndex: 0,
+          depth: 0,
+        }];
+        const localSeen = new Set([`${startRot}-${col}-${startRow}`]);
 
-        // 마지막 입력이 회전인 케이스 (킥 포함)
-        for (let toRot = 0; toRot < 4; toRot++) {
-          if (toRot === fromRot) continue;
-          const nextPiece = rotations[toRot];
-          const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
-          if (!rotResult) continue;
-
-          const key = `${toRot}-${rotResult.col}-${rotResult.row}-${fromRot}`;
+        while (queue.length > 0) {
+          const state = queue.shift();
+          const key = `${state.rotation}-${state.col}-${state.row}-${state.wasRotated ? 1 : 0}`;
           if (!seen.has(key)) {
             seen.add(key);
             allMoves.push({
+              rotation: state.rotation,
+              row: state.row,
+              col: state.col,
+              piece: rotations[state.rotation],
+              wasRotated: state.wasRotated,
+              wasKicked: state.wasKicked,
+              kickIndex: state.kickIndex,
+            });
+          }
+
+          if (state.depth >= 2) continue;
+
+          for (let toRot = 0; toRot < 4; toRot++) {
+            if (toRot === state.rotation) continue;
+            const rotResult = attemptRotation(
+              board,
+              rotations[state.rotation],
+              rotations[toRot],
+              state.row,
+              state.col,
+              'T',
+              state.rotation,
+              toRot,
+            );
+            if (!rotResult) continue;
+
+            const localKey = `${toRot}-${rotResult.col}-${rotResult.row}`;
+            if (localSeen.has(localKey)) continue;
+            localSeen.add(localKey);
+
+            queue.push({
               rotation: toRot,
               row: rotResult.row,
               col: rotResult.col,
-              piece: nextPiece,
               wasRotated: true,
               wasKicked: rotResult.kicked,
               kickIndex: rotResult.kickIndex,
+              depth: state.depth + 1,
             });
           }
         }

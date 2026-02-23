@@ -65,12 +65,6 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: true };
   }
 
-  // 싱글 라인 클리어에서 무킥 회전은 Mini로 보수 분류하여
-  // Mini가 T-Spin Single로 과대 분류되는 현상을 방지한다.
-  if (cleared === 1 && !wasKicked) {
-    return { isTSpin: true, isMini: true };
-  }
-
   // 기본 front-corner 규칙: 앞쪽 두 코너 중 하나라도 비면 Mini
   return { isTSpin: true, isMini: frontOccupied < 2 };
 }

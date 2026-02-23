@@ -15,9 +15,9 @@ import { canPlace } from '../game/board.js';
  * @returns {{isTSpin: boolean, isMini: boolean}} T-Spin 여부 및 미니 여부
  */
 export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, debug = false) {
-  // 가이드라인 기준: "마지막 입력이 회전"이면 T-Spin 가능.
-  // 실제 킥이 없더라도(킥 인덱스 0) T-Spin 자체는 성립할 수 있다.
-  if (!wasRotated) {
+  // Cold Clear/Cobra 계열 movegen에서는 T-Spin 후보를 회전+킥 기반으로 추적한다.
+  // 여기서는 오탐 방지를 위해 "마지막 입력이 회전" + "실제 킥 발생"을 모두 요구한다.
+  if (!wasRotated || !wasKicked) {
     if (debug) console.log('[T-Spin] Last action was not a rotation, not a T-Spin');
     return { isTSpin: false, isMini: false };
   }
@@ -42,33 +42,50 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
-  // mini/full 구분
-  // 4번째 킥(특수 SRS)은 무조건 Full
+  // mini/full 구분 (Guideline/Cobra 스타일 근사)
+  // 5번째 킥(인덱스 4, 특수 킥)은 Full 처리
   if (kickIndex === 4) return { isTSpin: true, isMini: false };
 
-  // SRS 미니 킥(1, 2번 킥)만 mini 허용, 0번(중심), 3번(축 이동)은 Full
-  // mini 코너(회전 방향 기준 앞쪽 2개)
-  function rotateCorner([dx, dy], rot) {
-    switch (rot) {
-      case 0: return [dx, dy];
-      case 1: return [dy, -dx];
-      case 2: return [-dx, -dy];
-      case 3: return [-dy, dx];
-    }
-  }
-  const miniCorners = [
-    rotateCorner([-1, 1], rotation),
-    rotateCorner([1, 1], rotation)
-  ];
-  let miniOccupied = 0;
-  for (const [dx, dy] of miniCorners) {
-    if (isFilled(row + dx, col + dy)) miniOccupied++;
+  const tl = isFilled(row - 1, col - 1);
+  const tr = isFilled(row - 1, col + 1);
+  const bl = isFilled(row + 1, col - 1);
+  const br = isFilled(row + 1, col + 1);
+
+  // T가 바라보는 방향(front) / 반대(back) 코너 2개
+  let frontA = false;
+  let frontB = false;
+  let backA = false;
+  let backB = false;
+  switch (rotation) {
+    case 0: // up
+      frontA = tl; frontB = tr;
+      backA = bl; backB = br;
+      break;
+    case 1: // right
+      frontA = tr; frontB = br;
+      backA = tl; backB = bl;
+      break;
+    case 2: // down
+      frontA = bl; frontB = br;
+      backA = tl; backB = tr;
+      break;
+    case 3: // left
+      frontA = tl; frontB = bl;
+      backA = tr; backB = br;
+      break;
+    default:
+      frontA = tl; frontB = tr;
+      backA = bl; backB = br;
   }
 
-  // mini는 1,2번 킥(미니킥) + 앞쪽 2코너 모두 막힘
-  if (wasKicked && (kickIndex === 1 || kickIndex === 2) && miniOccupied === 2) {
-    return { isTSpin: true, isMini: true };
+  // Cobra/Guideline 실전 판정에 가깝게: back 코너 2개가 막혀야 스핀으로 인정
+  if (!(backA && backB)) {
+    return { isTSpin: false, isMini: false };
   }
+
+  // front 2코너가 모두 막히면 Full, 아니면 Mini
+  const isMini = !(frontA && frontB);
+  if (isMini) return { isTSpin: true, isMini: true };
   // 나머지는 모두 Full
   return { isTSpin: true, isMini: false };
 }

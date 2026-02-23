@@ -636,102 +636,80 @@ function aiStep() {
     console.log('턴 시작:', { 현재: currentPiece, 홀드: holdPiece, 사용가능: canHold, 다음큐: nextQueue.slice(0, 3) });
     
     const piecesToConsider = [currentPiece, ...nextQueue];
-    const move = findBestMove(numericBoard, piecesToConsider, b2b, mode);
+    let selectedMove = findBestMove(numericBoard, piecesToConsider, b2b, mode);
     
-    if (!move) {
+    if (!selectedMove || !selectedMove.move) {
         endGame();
         return;
     }
 
-    // 홀드 사용 판단: 모든 상황에서 도움이 될 때 사용
+    // 홀드 사용 판단: 성능 이득 + 실제 적용 가능 여부를 함께 확인
     let useHold = false;
-    if (canHold && holdPiece !== null) {
-        // 홀드된 피스로 얻을 수 있는 최고 점수 계산
-        const heldMoves = _findMovesForPiece(numericBoard, holdPiece, b2b, mode);
-        if (heldMoves.length > 0) {
-            heldMoves.sort((a, b) => b.score - a.score);
-            const heldMove = heldMoves[0];
-            const heldScore = heldMove.score;
-            const normalScore = (move && move.score) || 0;
-            
-            // T-Spin, Perfect Clear를 위해 홀드 사용 (안전한 상황에서도)
-            const isTSpinOrPC = [
-                'tsd', 'tst', 'tss', 'tsf',  // T-Spin
-                'pc', 'tetris_pc', 'triple_pc', 'double_pc', 'single_pc'  // Perfect Clear
-            ].includes(heldMove.action);
-            
-            // T-Spin/PC를 할 수 있으면 홀드 사용, 아니면 점수가 훨씬 높을 때만 사용
-            if (isTSpinOrPC) {
-                useHold = true;
-                console.log('홀드 결정 (T-Spin/PC):', heldMove.action);
-            } else if (heldScore > normalScore + 200) {
-                // 일반 경우는 점수 차이가 클 때만 홀드 (200점 이상)
-                useHold = true;
-                console.log('홀드 결정 (점수):', heldScore, '>', normalScore + 200);
-            }
+    let holdPlan = null;
+
+    if (canHold) {
+        let holdCurrent = null;
+        let holdQueue = null;
+
+        if (holdPiece !== null) {
+            holdCurrent = holdPiece;
+            holdQueue = [...nextQueue];
+        } else if (nextQueue.length > 0) {
+            holdCurrent = nextQueue[0];
+            holdQueue = nextQueue.slice(1);
         }
-    } else if (canHold && holdPiece === null) {
-        // 첫 홀드: 현재 피스를 홀드하고 다음 피스를 받을 지 판단
-        // 다음 피스가 현재 피스보다 나으면 현재 피스를 홀드
-        if (nextQueue.length > 0) {
-            const nextPieceMoves = _findMovesForPiece(numericBoard, nextQueue[0], b2b, mode);
-            if (nextPieceMoves.length > 0) {
-                nextPieceMoves.sort((a, b) => b.score - a.score);
-                const nextScore = nextPieceMoves[0].score;
-                const currentScore = (move && move.score) || 0;
-                
-                // 다음 피스가 나으면 현재 피스를 홀드 (단, 현재 점수가 낮을 때 우선적으로)
-                if (nextScore > currentScore) {
+
+        if (holdCurrent) {
+            const holdPiecesToConsider = [holdCurrent, ...holdQueue];
+            const holdMove = findBestMove(numericBoard, holdPiecesToConsider, b2b, mode);
+
+            if (holdMove && holdMove.move) {
+                const holdScore = holdMove.score || 0;
+                const normalScore = selectedMove.score || 0;
+                const holdAction = holdMove.move.action || 'none';
+
+                const isTSpinOrPC = [
+                    'tsd', 'tst', 'tss', 'tsf', 'tsm',
+                    'pc', 'tetris_pc', 'triple_pc', 'double_pc', 'single_pc', 'tsd_pc', 'tst_pc', 'tss_pc'
+                ].includes(holdAction);
+
+                if (isTSpinOrPC || holdScore > normalScore + 200) {
                     useHold = true;
-                    console.log('홀드 결정 (다음 피스):', nextScore, '>', currentScore);
+                    holdPlan = {
+                        newCurrent: holdCurrent,
+                        newQueue: holdQueue,
+                        newHold: currentPiece,
+                        move: holdMove,
+                    };
+                    console.log('홀드 결정:', { holdAction, holdScore, normalScore });
                 }
             }
         }
     }
     
-    // 홀드 실행 및 큐/가방 동기화 (중복/유령 미노 방지)
-    if (useHold) {
+    // 홀드 실행 및 큐/가방 동기화 (중복/유령 미노/자살 홀드 방지)
+    if (useHold && holdPlan) {
         console.log('홀드 사용:', { 현재: currentPiece, 홀드됨: holdPiece, useHold });
-        if (holdPiece === null) {
-            // 첫 홀드: 현재 피스를 홀드 박스로 이동
-            holdPiece = currentPiece;
-            // 큐에서 새 피스 받기
-            currentPiece = nextQueue.shift();
-            // 7-bag 규칙에서는 동일한 타입이 큐에 여러 번 존재할 수 있으므로
-            // 타입 기준 필터링으로 큐를 삭제하면 bag 분포가 깨진다.
-            // 7-bag 보충
-            while (nextQueue.length < 5) nextQueue.push(randomPiece());
-            console.log('첫 홀드 후:', { 현재: currentPiece, 홀드됨: holdPiece });
-        } else {
-            // 홀드된 피스와 현재 피스 교환
-            const temp = currentPiece;
-            currentPiece = holdPiece;
-            holdPiece = temp;
-            // 7-bag 분포 보존을 위해 큐를 타입 기준으로 필터링하지 않는다.
-            // 7-bag 보충
-            while (nextQueue.length < 5) nextQueue.push(randomPiece());
-            console.log('피스 교환 후:', { 현재: currentPiece, 홀드됨: holdPiece });
-        }
+        currentPiece = holdPlan.newCurrent;
+        nextQueue = [...holdPlan.newQueue];
+        holdPiece = holdPlan.newHold;
+        while (nextQueue.length < 5) nextQueue.push(randomPiece());
         canHold = false;
-        // 홀드 후 AI 움직임 다시 계산
-        const newPiecesToConsider = [currentPiece, ...nextQueue];
-        const newMove = findBestMove(numericBoard, newPiecesToConsider, b2b, mode);
-        if (!newMove) {
-            endGame();
-            return;
-        }
-        // 홀드 후의 최적 이동으로 업데이트
-        move.move = newMove.move;
-        move.score = newMove.score;
+        selectedMove = holdPlan.move;
     }
 
-    currentRot = move.move.rotation;
-    currentCol = move.move.col;
-    currentRow = move.move.row;
+    if (!selectedMove || !selectedMove.move) {
+        endGame();
+        return;
+    }
+
+    currentRot = selectedMove.move.rotation;
+    currentCol = selectedMove.move.col;
+    currentRow = selectedMove.move.row;
 
     // movegen에서 계산한 최종 배치(킥 반영)를 그대로 적용한다.
     // 기존처럼 rot/col만 적용해 재드롭하면 킥 배치가 사라져 T-Spin/PC 경로가 무효화된다.
-    const pieceMatrix = move.move.piece || getPieceMatrix(currentPiece, currentRot);
+    const pieceMatrix = selectedMove.move.piece || getPieceMatrix(currentPiece, currentRot);
 
     if (currentRow < 0 || !canPlace(numericBoard, pieceMatrix, currentRow, currentCol)) {
         endGame();
@@ -751,8 +729,8 @@ function aiStep() {
     const { board: clearedBoardWithColor, cleared } = clearLines(tempBoard);
     board = clearedBoardWithColor;
 
-    updateScore(move.move.action, cleared);
-    updateActionDisplay(move.move.action, useHold);
+    updateScore(selectedMove.move.action, cleared);
+    updateActionDisplay(selectedMove.move.action, useHold);
     spawnPiece();
     updateStats();
     drawAll();

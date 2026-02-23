@@ -121,7 +121,9 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   }
 
   if (cleared === 1) {
-    return { isTSpin: true, isMini: true };
+    // Single은 앞코너 2개가 막히면 Full, 아니면 Mini (test-5는 위에서 Full 처리)
+    const isMiniSingle = frontOccupied < 2;
+    return { isTSpin: true, isMini: isMiniSingle };
   }
 
   const isMini = frontOccupied < 2;

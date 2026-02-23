@@ -9,11 +9,11 @@ import { placePiece } from '../game/board.js';
 export function getTPivotFromPlacement(row, col, rotation) {
   switch (rotation) {
     case 1:
-      return { centerR: row + 1, centerC: col };
+      return { centerR: row + 1, centerC: col + 1 };
     case 2:
       return { centerR: row, centerC: col + 1 };
     case 3:
-      return { centerR: row + 1, centerC: col + 1 };
+      return { centerR: row + 1, centerC: col };
     case 0:
     default:
       return { centerR: row + 1, centerC: col + 1 };
@@ -72,6 +72,13 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   // SRS test-5는 Full 처리
   if (kickIndex === 4) {
     return { isTSpin: true, isMini: false };
+  }
+
+
+  // 킥 없이 정면 2코너가 모두 찬 경우는 과대 판정을 줄이기 위해 일반 라인클리어로 처리한다.
+  // (실전에서 보고된 "미니인데 싱글/풀로 분류" 오탐 억제)
+  if (!wasKicked && frontOccupied === 2) {
+    return { isTSpin: false, isMini: false };
   }
 
   // 기본 front-corner 규칙을 우선 적용한다.

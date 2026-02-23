@@ -56,6 +56,7 @@ function findAllMovePositions(board, pieceType) {
             const nextPiece = rotations[toRot];
             const rotResult = attemptRotation(board, piece, nextPiece, rotateRow, col, 'T', fromRot, toRot);
             if (!rotResult) continue;
+            if (canPlace(board, nextPiece, rotResult.row + 1, rotResult.col)) continue;
 
             addOrReplaceMove({
               rotation: toRot,

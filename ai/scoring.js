@@ -78,9 +78,10 @@ const ACTION_SCORES = {
   tetris: 1300,
   tsmzero: 80,
   tszero: 180,
-  tsm: 700,
-  tss: 1400,
-  tsd: 3200,
+  tsm: 550,
+  tsm_double: 1800,
+  tss: 1100,
+  tsd: 4200,
   tst: 4700,
   tetris_pc: 14000,
   triple_pc: 10800,
@@ -158,13 +159,13 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   // B2B 유지: T-Spin, Tetris, PC 동반 액션 모두 포함
   if (isB2B) {
     score += 450 + Math.min(1200, b2bCount * 75);
-    if (lastAction === "tsd" || lastAction === "tst") score += 600;
+    if (lastAction === "tsd" || lastAction === "tst" || lastAction === "tsd_pc") score += 1100;
   }
 
   // 모드별 추가 점수
   if (mode === "safe") {
     // 안전 모드: PC 탐색 + T-Spin 극대화
-    if (lastAction === "tsd") score += 900;
+    if (lastAction === "tsd") score += 1600;
     if (lastAction === "tst") score += 700;
     if (lastAction.includes("_pc") || lastAction === "pc") score += 4000;
   }
@@ -181,7 +182,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   if (mode === "straight") {
     // 일자줄 모드: 테트리스↔TSD 교차
     if (lastAction === "tetris" || lastAction === "tetris_pc") score += 1000;
-    if (lastAction === "tsd") score += 1000;
+    if (lastAction === "tsd") score += 1800;
     if (lastAction.includes("_pc")) score += 4000;  // PC도 높음
   }
 

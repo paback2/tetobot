@@ -413,6 +413,9 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
             let centerR = row + 1, centerC = col + 1;
             if (rotation === 1) {
                 centerC = col;
+            } else if (rotation === 2) {
+                centerR = row;
+                centerC = col + 1;
             }
             
             // T-piece을 놓은 후의 board에서 확인해야 함!

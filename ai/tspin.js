@@ -1,5 +1,24 @@
 import { PIECES } from '../game/pieces.js';
-import { canPlace } from '../game/board.js';
+import { placePiece } from '../game/board.js';
+
+
+/**
+ * 배치 좌표(좌상단)와 회전 상태에서 T 피벗 좌표를 계산한다.
+ * PIECES의 trim된 회전 매트릭스 기준 보정값을 사용한다.
+ */
+export function getTPivotFromPlacement(row, col, rotation) {
+  switch (rotation) {
+    case 1:
+      return { centerR: row + 1, centerC: col };
+    case 2:
+      return { centerR: row, centerC: col + 1 };
+    case 3:
+      return { centerR: row + 1, centerC: col + 1 };
+    case 0:
+    default:
+      return { centerR: row + 1, centerC: col + 1 };
+  }
+}
 
 /**
  * Tetris Guideline T-Spin 감지
@@ -36,6 +55,18 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
+
+  // 과대 판정 방지를 위해 immobile 조건(상하좌우 4방향 중 3방향 이상 막힘)을 추가한다.
+  const cardinal = [[-1,0],[1,0],[0,-1],[0,1]];
+  let blockedCardinal = 0;
+  for (const [dr, dc] of cardinal) {
+    if (isFilled(row + dr, col + dc)) blockedCardinal++;
+  }
+  if (!wasKicked && blockedCardinal < 3) {
+    if (debug) console.log('[T-Spin] Not immobile enough (non-kick)');
+    return { isTSpin: false, isMini: false };
+  }
+
   // 회전 방향 기준 앞쪽(front) 두 코너 점유로 mini/full 구분
   const frontCornersByRotation = {
     0: [[-1, -1], [-1, 1]],
@@ -55,24 +86,26 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: false };
   }
 
-  // 라인을 2줄 이상 지운 T-Spin은 Full로 본다 (가이드라인 실전 룰에 맞춤)
+  // Mini/Full 분기 (cold-clear/cobra 계열 실전 기준에 맞춘 보수 분류):
+  // - 2줄 이상 클리어는 Full
+  // - 1줄 클리어는 Mini를 우선하고, 강한 Full 시그널(앞코너 2개 + 킥)만 Full
   if (cleared >= 2) {
     return { isTSpin: true, isMini: false };
   }
 
-  // SRS 1/2 킥은 Mini 성격이 강하다.
-  if (wasKicked && (kickIndex === 1 || kickIndex === 2)) {
-    return { isTSpin: true, isMini: true };
+  if (cleared === 1) {
+    if (!wasKicked) {
+      return { isTSpin: true, isMini: true };
+    }
+
+    // 킥 회전 싱글은 기본 Mini.
+    // 단, 앞코너 2개가 모두 찬 강한 형태만 Full Single로 유지.
+    const isMiniSingle = frontOccupied < 2 || kickIndex === 1 || kickIndex === 2;
+    return { isTSpin: true, isMini: isMiniSingle };
   }
 
-  // 싱글 라인 클리어에서 무킥 회전은 Mini로 보수 분류하여
-  // Mini가 T-Spin Single로 과대 분류되는 현상을 방지한다.
-  if (cleared === 1 && !wasKicked) {
-    return { isTSpin: true, isMini: true };
-  }
-
-  // 기본 front-corner 규칙: 앞쪽 두 코너 중 하나라도 비면 Mini
-  return { isTSpin: true, isMini: frontOccupied < 2 };
+  const isMini = frontOccupied < 2;
+  return { isTSpin: true, isMini };
 }
 
 
@@ -91,7 +124,7 @@ export function getTSpinAction(isTSpin, isMini, cleared) {
     switch (cleared) {
       case 0: return 'tsmzero';  // Mini 0-clear
       case 1: return 'tsm';       // Mini Single
-      case 2: return 'tsm_double'; // Mini Double (Full 취급)
+      case 2: return 'tsd';       // Mini Double은 별도 분류하지 않고 Full Double로 처리
       default: return 'tsm';
     }
   }
@@ -150,10 +183,22 @@ export function findTSpinCandidates(board, allMoves) {
   const candidates = [];
 
   for (const move of allMoves) {
-    const { rotation, row, col, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
-    
+    const { rotation, row, col, piece, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
+
+    const boardForCheck = piece ? placePiece(board, piece, row, col) : board;
+    const { centerR, centerC } = getTPivotFromPlacement(row, col, rotation);
+
     // T-Spin 확인
-    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0, 0);
+    const { isTSpin, isMini } = checkTSpin(
+      boardForCheck,
+      centerR,
+      centerC,
+      rotation,
+      wasKicked,
+      wasRotated,
+      kickIndex,
+      0,
+    );
     
     if (isTSpin) {
       const isFin = detectTSpinFin(board, row, col, rotation);

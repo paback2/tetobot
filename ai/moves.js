@@ -13,11 +13,11 @@ function isPerfectClear(board) {
 }
 
 function getTCenter(row, col, rotation) {
+  // NOTE: We use trimmed piece matrices in PIECES, so offsets differ by rotation.
+  // These offsets map back to the true T pivot used by the 3-corner check.
   switch (rotation) {
     case 1:
       return { centerR: row + 1, centerC: col };
-    case 2:
-      return { centerR: row, centerC: col + 1 };
     case 3:
       return { centerR: row + 1, centerC: col + 1 };
     case 0:
@@ -28,6 +28,8 @@ function getTCenter(row, col, rotation) {
 
 function findAllMovePositions(board, pieceType) {
   const rotations = PIECES[pieceType];
+  if (!rotations || rotations.length === 0) return [];
+
   const allMoves = [];
   const seen = new Set();
 
@@ -84,33 +86,64 @@ function findAllMovePositions(board, pieceType) {
       }
     }
 
-    return allMoves;
-  }
+    // Soft drop
+    if (canPlace(board, piece, state.row + 1, state.col)) {
+      pushState({
+        row: state.row + 1,
+        col: state.col,
+        rotation: state.rotation,
+        wasRotated: false,
+        wasKicked: false,
+        kickIndex: 0,
+      });
+    }
 
-  for (let rot = 0; rot < rotations.length; rot++) {
-    const piece = rotations[rot];
-    for (let col = -2; col < 10; col++) {
-      const row = dropRowOn(board, piece, col);
-      if (row !== -1 && canPlace(board, piece, row, col)) {
-        const key = `${rot}-${col}-${row}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          allMoves.push({
-            rotation: rot,
-            row,
-            col,
-            piece,
-            wasRotated: false,
-            wasKicked: false,
-            kickIndex: 0,
-          });
-        }
+    // Shift left/right
+    for (const dc of [-1, 1]) {
+      const newCol = state.col + dc;
+      if (canPlace(board, piece, state.row, newCol)) {
+        pushState({
+          row: state.row,
+          col: newCol,
+          rotation: state.rotation,
+          wasRotated: false,
+          wasKicked: false,
+          kickIndex: 0,
+        });
+      }
+    }
+
+    // Rotate CW / CCW
+    if (rotations.length > 1 && pieceType !== 'O') {
+      const nextRot = (state.rotation + 1) % rotations.length;
+      const prevRot = (state.rotation - 1 + rotations.length) % rotations.length;
+      for (const toRot of new Set([nextRot, prevRot])) {
+        const rotResult = attemptRotation(
+          board,
+          piece,
+          rotations[toRot],
+          state.row,
+          state.col,
+          pieceType,
+          state.rotation,
+          toRot,
+        );
+        if (!rotResult) continue;
+        pushState({
+          row: rotResult.row,
+          col: rotResult.col,
+          rotation: toRot,
+          wasRotated: true,
+          wasKicked: rotResult.kicked,
+          kickIndex: rotResult.kickIndex,
+        });
       }
     }
   }
 
   return allMoves;
 }
+
 
 function _findMovesForPiece(board, pieceType, isB2B, mode) {
   const pieceMoves = findAllMovePositions(board, pieceType);
@@ -179,6 +212,28 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
   return scoredMoves;
 }
 
+
+function selectStrategicCandidates(moves, limit, extraSpecial = 6) {
+  if (moves.length <= limit) return moves;
+
+  const selected = moves.slice(0, limit);
+  const used = new Set(selected.map(m => `${m.move.rotation}:${m.move.col}:${m.move.row}:${m.action}`));
+
+  const specials = moves
+    .filter(m => m.action.includes('_pc') || m.action === 'pc' || actionPriority(m.action) >= 60)
+    .sort((a, b) => actionPriority(b.action) - actionPriority(a.action) || b.score - a.score)
+    .slice(0, extraSpecial);
+
+  for (const sp of specials) {
+    const key = `${sp.move.rotation}:${sp.move.col}:${sp.move.row}:${sp.action}`;
+    if (used.has(key)) continue;
+    selected.push(sp);
+    used.add(key);
+  }
+
+  return selected;
+}
+
 function actionPriority(action) {
   if (!action) return 0;
   if (action === 'pc' || action.includes('_pc')) return 100;
@@ -189,6 +244,16 @@ function actionPriority(action) {
   if (action === 'tsm') return 45;
   if (action === 'tetris') return 40;
   return 0;
+}
+
+
+function sortForSpecialPath(candidates) {
+  return [...candidates].sort((a, b) => {
+    const pa = actionPriority(a.action);
+    const pb = actionPriority(b.action);
+    if (pb !== pa) return pb - pa;
+    return b.score - a.score;
+  });
 }
 
 function findBestMoveRecursive(board, pieces, isB2B, mode, depth = 0) {
@@ -203,7 +268,7 @@ function findBestMoveRecursive(board, pieces, isB2B, mode, depth = 0) {
   }
 
   const dynamicBeam = Math.max(8, BEAM_WIDTH - depth * 3);
-  const candidates = moves.slice(0, dynamicBeam);
+  const candidates = selectStrategicCandidates(moves, dynamicBeam);
 
   let bestScore = -Infinity;
   let bestMove = null;
@@ -229,7 +294,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   const currentPiece = pieces[0];
   const options = [];
 
-  const noHoldMoves = _findMovesForPiece(board, currentPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+  const noHoldMoves = sortForSpecialPath(_findMovesForPiece(board, currentPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
   for (const candidate of noHoldMoves) {
     options.push({
       ...candidate,
@@ -252,7 +317,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
 
   // 홀드 박스에 피스가 있는 경우
   if (heldPiece !== null) {
-    const holdMoves = _findMovesForPiece(board, heldPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+    const holdMoves = sortForSpecialPath(_findMovesForPiece(board, heldPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
     for (const candidate of holdMoves) {
       options.push({
         ...candidate,
@@ -274,7 +339,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   } else if (pieces.length > 1) {
     // 홀드 박스가 비어있으면 다음 피스를 현재 턴에 사용
     const nextPiece = pieces[1];
-    const nextPieceMoves = _findMovesForPiece(board, nextPiece, isB2B, mode).slice(0, SPECIAL_BEAM);
+    const nextPieceMoves = sortForSpecialPath(_findMovesForPiece(board, nextPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
     for (const candidate of nextPieceMoves) {
       options.push({
         ...candidate,

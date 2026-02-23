@@ -67,6 +67,14 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
+
+  // 라인 클리어가 발생한 경우, 실제 실전 스핀 판정과 오탐 방지를 위해
+  // 킥 회전이 아닌 케이스는 T-Spin으로 취급하지 않는다.
+  if (cleared > 0 && !wasKicked) {
+    if (debug) console.log('[T-Spin] Cleared line without kick');
+    return { isTSpin: false, isMini: false };
+  }
+
   // 회전 방향 기준 앞쪽(front) 두 코너 점유로 mini/full 구분
   const frontCornersByRotation = {
     0: [[-1, -1], [-1, 1]],
@@ -98,10 +106,6 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   }
 
   if (cleared === 1) {
-    if (kickIndex === 4) {
-      return { isTSpin: true, isMini: false };
-    }
-    // 단일 클리어는 Mini 우선 (요청된 오분류 방지)
     return { isTSpin: true, isMini: true };
   }
 

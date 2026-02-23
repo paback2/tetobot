@@ -171,10 +171,6 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
           centerR = row + 1;
           centerC = col;
           break;
-        case 2:
-          centerR = row;
-          centerC = col + 1;
-          break;
         case 3:
           centerR = row + 1;
           centerC = col + 1;

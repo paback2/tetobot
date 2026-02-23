@@ -40,91 +40,74 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
-  const corners = [
-    [-1, -1], [1, -1], [-1, 1], [1, 1]
-  ];
   const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
 
-  let occupied = 0;
-  let occupiedInBounds = 0;
-  for (const [dx, dy] of corners) {
-    const cr = row + dx;
-    const cc = col + dy;
-    const filled = isFilled(cr, cc);
-    if (!filled) continue;
-    occupied++;
-    if (cr >= 0 && cr < 20 && cc >= 0 && cc < 10 && board[cr][cc] !== 0) {
-      occupiedInBounds++;
-    }
-  }
+  const corners = {
+    tl: isFilled(row - 1, col - 1),
+    tr: isFilled(row - 1, col + 1),
+    bl: isFilled(row + 1, col - 1),
+    br: isFilled(row + 1, col + 1),
+  };
 
+  const occupied = [corners.tl, corners.tr, corners.bl, corners.br].filter(Boolean).length;
   if (occupied < 3) {
     if (debug) console.log('[T-Spin] Less than 3 occupied corners');
     return { isTSpin: false, isMini: false };
   }
 
-
-  // 과대 판정 방지를 위해 immobile 조건(상하좌우 4방향 중 3방향 이상 막힘)을 추가한다.
   const cardinal = [[-1,0],[1,0],[0,-1],[0,1]];
   let blockedCardinal = 0;
   for (const [dr, dc] of cardinal) {
     if (isFilled(row + dr, col + dc)) blockedCardinal++;
   }
-  if (!wasKicked && blockedCardinal < 3) {
-    if (debug) console.log('[T-Spin] Not immobile enough (non-kick)');
+
+  // cobra/cold-clear 계열 movegen과 유사하게, 킥 회전이 아니면 완전 immobile일 때만 스핀으로 인정
+  if (!wasKicked && blockedCardinal < 4) {
+    if (debug) console.log('[T-Spin] Non-kick rotation was not fully immobile');
     return { isTSpin: false, isMini: false };
   }
 
-
-  // 라인 클리어가 발생한 경우, 실제 실전 스핀 판정과 오탐 방지를 위해
-  // 킥 회전이 아닌 케이스는 T-Spin으로 취급하지 않는다.
-  if (cleared > 0 && !wasKicked) {
-    if (debug) console.log('[T-Spin] Cleared line without kick');
-    return { isTSpin: false, isMini: false };
-  }
-
-  // 벽/천장에 의한 코너 충족만으로 발생하는 오탐 방지:
-  // 실제 블록으로 채워진 코너가 너무 적으면 T-Spin으로 보지 않는다.
-  if (cleared > 0 && occupiedInBounds < 2) {
-    if (debug) console.log('[T-Spin] Too few in-bounds occupied corners');
-    return { isTSpin: false, isMini: false };
-  }
-
-  // 회전 방향 기준 앞쪽(front) 두 코너 점유로 mini/full 구분
-  const frontCornersByRotation = {
-    0: [[-1, -1], [-1, 1]],
-    1: [[-1, 1], [1, 1]],
-    2: [[1, -1], [1, 1]],
-    3: [[-1, -1], [1, -1]],
+  const frontByRotation = {
+    0: [corners.tl, corners.tr],
+    1: [corners.tr, corners.br],
+    2: [corners.bl, corners.br],
+    3: [corners.tl, corners.bl],
+  };
+  const backByRotation = {
+    0: [corners.bl, corners.br],
+    1: [corners.tl, corners.bl],
+    2: [corners.tl, corners.tr],
+    3: [corners.tr, corners.br],
   };
 
-  const frontCorners = frontCornersByRotation[rotation] || frontCornersByRotation[0];
-  let frontOccupied = 0;
-  for (const [dx, dy] of frontCorners) {
-    if (isFilled(row + dx, col + dy)) frontOccupied++;
-  }
+  const frontOccupied = (frontByRotation[rotation] || frontByRotation[0]).filter(Boolean).length;
+  const backOccupied = (backByRotation[rotation] || backByRotation[0]).filter(Boolean).length;
 
   // SRS test-5는 Full 처리
   if (kickIndex === 4) {
     return { isTSpin: true, isMini: false };
   }
 
-  // Mini/Full 분기 (오탐 억제 우선):
-  // - 2줄 이상은 "강한" 스핀 증거(테스트5 또는 킥+앞코너 2개)에서만 Full
-  // - 1줄은 기본 Mini, test-5만 Full Single
+  // 라인 클리어 T-Spin에서 mini 오판 억제:
+  // - Mini는 킥 기반(또는 test-5) 증거가 있을 때만
+  // - 2줄 이상은 Full만 인정
+  const isMiniByCorners = frontOccupied < 2;
   if (cleared >= 2) {
-    const strongFull = kickIndex === 4 || (wasKicked && kickIndex >= 1 && frontOccupied === 2 && blockedCardinal >= 4);
-    if (!strongFull) {
+    if (isMiniByCorners) {
       return { isTSpin: false, isMini: false };
     }
     return { isTSpin: true, isMini: false };
   }
 
   if (cleared === 1) {
-    return { isTSpin: true, isMini: true };
+    if (isMiniByCorners) {
+      if (!wasKicked) return { isTSpin: false, isMini: false };
+      return { isTSpin: true, isMini: true };
+    }
+    return { isTSpin: true, isMini: false };
   }
 
-  const isMini = frontOccupied < 2;
+  const isMini = isMiniByCorners && (wasKicked || backOccupied < 2);
   return { isTSpin: true, isMini };
 }
 

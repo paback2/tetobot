@@ -34,39 +34,42 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
-  // T가 바라보는 방향(front) 코너 2개
-  let frontA = false;
-  let frontB = false;
-  switch (rotation) {
-    case 0: // up
-      frontA = tl; frontB = tr;
-      break;
-    case 1: // right
-      frontA = tr; frontB = br;
-      break;
-    case 2: // down
-      frontA = bl; frontB = br;
-      break;
-    case 3: // left
-      frontA = tl; frontB = bl;
-      break;
-    default:
-      frontA = tl; frontB = tr;
+  // mini/full 구분
+  // 4번째 킥(특수 SRS)은 무조건 Full
+  if (kickIndex === 4) return { isTSpin: true, isMini: false };
+
+  // 가이드라인 기반에 가깝게 전면(front) 코너 점유를 우선 사용:
+  // 전면 2코너가 모두 막히면 Full, 그렇지 않으면 Mini로 본다.
+  // (180회전 미사용 전제)
+  const frontCornersByRotation = {
+    0: [[-1, -1], [-1, 1]],
+    1: [[-1, 1], [1, 1]],
+    2: [[1, -1], [1, 1]],
+    3: [[-1, -1], [1, -1]],
+  };
+
+  const frontCorners = frontCornersByRotation[rotation] || frontCornersByRotation[0];
+  let frontOccupied = 0;
+  for (const [dx, dy] of frontCorners) {
+    if (isFilled(row + dx, col + dy)) frontOccupied++;
   }
 
-  // mini/full 분류
-  // - 특수 5번째 킥은 Full
-  // - Mini는 front 2코너가 비어 있는 형태 + 실제 킥이 있었을 때만 허용
-  if (kickIndex === 4) {
-    return { isTSpin: true, isMini: false };
-  }
+  // 킥 기반 보정:
+  // SRS 3/4번 킥은 특수 벽킥으로 Full 경향이 매우 강함.
+  if (kickIndex === 3 || kickIndex === 4) return { isTSpin: true, isMini: false };
 
-  const miniByCorners = !(frontA && frontB);
-  if (miniByCorners && wasKicked) {
+  // 무킥(0번) 회전은 오탐 방지를 위해 Mini로 강하게 분류.
+  // 실제 Full로 인정되는 예외 패턴도 있으나, 엔진의 안정성을 위해 보수적으로 처리한다.
+  if (!wasKicked && kickIndex === 0) {
     return { isTSpin: true, isMini: true };
   }
 
-  return { isTSpin: true, isMini: false };
+  // 1/2번 킥은 front corner 점유로 mini/full 분류
+  if ((kickIndex === 1 || kickIndex === 2) && frontOccupied < 2) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  return { isTSpin: true, isMini: frontOccupied < 2 };
 }
 
 

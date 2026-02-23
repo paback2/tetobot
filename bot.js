@@ -57,6 +57,8 @@ class GameState {
       this.currentPiece = newCurrent;
     }
 
+    // 7-bag 순서를 깨지 않도록 큐는 그대로 유지한다.
+
     this.canHold = false; // 이 턴에서 홀드 사용 완료
     return true;
   }
@@ -77,8 +79,7 @@ class GameState {
       return null;
     }
 
-    // 7-bag 규칙에서는 같은 피스가 큐에 연속/중복으로 나올 수 있으므로
-    // 현재/홀드와 같은 타입이라도 큐에서 제거하면 안 된다.
+    // 7-bag 보존: queue는 있는 그대로 탐색에 사용
     const pieces = [this.currentPiece, ...this.pieceQueue];
     const mode = detectMode(this.board);
 

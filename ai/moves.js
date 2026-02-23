@@ -16,14 +16,12 @@ function getTCenter(row, col, rotation) {
   // NOTE: We use trimmed piece matrices in PIECES, so offsets differ by rotation.
   // These offsets map back to the true T pivot used by the 3-corner check.
   switch (rotation) {
-    case 0:
-      return { centerR: row + 1, centerC: col + 1 };
     case 1:
       return { centerR: row + 1, centerC: col };
-    case 2:
-      return { centerR: row + 1, centerC: col + 1 };
     case 3:
       return { centerR: row + 1, centerC: col + 1 };
+    case 0:
+    case 2:
     default:
       return { centerR: row + 1, centerC: col + 1 };
   }
@@ -34,44 +32,58 @@ function findAllMovePositions(board, pieceType) {
   if (!rotations || rotations.length === 0) return [];
 
   const allMoves = [];
-  const lockSeen = new Set();
+  const seen = new Set();
 
-  // Cold Clear/Cobra 계열처럼 스폰 상태에서 도달 가능한 상태 그래프를 탐색한다.
-  // (현재 구현은 softdrop 기반 BFS로 reachable lock만 수집)
-  const spawn = { row: 0, col: 3, rotation: 0, wasRotated: false, wasKicked: false, kickIndex: 0 };
-  if (!canPlace(board, rotations[spawn.rotation], spawn.row, spawn.col)) {
-    return [];
-  }
+  if (pieceType === 'T') {
+    const addOrReplaceMove = (move) => {
+      const existingIndex = allMoves.findIndex(
+        (existing) => existing.rotation === move.rotation && existing.col === move.col && existing.row === move.row
+      );
 
-  const queue = [spawn];
-  const visited = new Set([`${spawn.row}:${spawn.col}:${spawn.rotation}:${spawn.wasRotated ? 1 : 0}`]);
+      if (existingIndex !== -1) {
+        if (!move.wasRotated && allMoves[existingIndex].wasRotated) {
+          allMoves[existingIndex] = move;
+        }
+        return;
+      }
 
-  const pushState = (state) => {
-    const key = `${state.row}:${state.col}:${state.rotation}:${state.wasRotated ? 1 : 0}`;
-    if (visited.has(key)) return;
-    visited.add(key);
-    queue.push(state);
-  };
+      allMoves.push(move);
+    };
 
-  while (queue.length > 0) {
-    const state = queue.shift();
-    const piece = rotations[state.rotation];
+    for (let fromRot = 0; fromRot < 4; fromRot++) {
+      const piece = rotations[fromRot];
+      for (let col = -2; col < 10; col++) {
+        const dropRow = dropRowOn(board, piece, col);
+        if (dropRow === -1) continue;
 
-    // 현재 상태에서 하드드롭한 lock 위치 추가
-    const lockRow = dropRowOn(board, piece, state.col);
-    if (lockRow !== -1) {
-      const lockKey = `${state.rotation}:${state.col}:${lockRow}:${state.wasRotated ? 1 : 0}:${state.kickIndex}`;
-      if (!lockSeen.has(lockKey)) {
-        lockSeen.add(lockKey);
-        allMoves.push({
-          rotation: state.rotation,
-          row: lockRow,
-          col: state.col,
+        // 직접 하드드롭 (회전 없음)
+        addOrReplaceMove({
+          rotation: fromRot,
+          row: dropRow,
+          col,
           piece,
-          wasRotated: state.wasRotated,
-          wasKicked: state.wasKicked,
-          kickIndex: state.kickIndex,
+          wasRotated: false,
+          wasKicked: false,
+          kickIndex: 0,
         });
+
+        // 마지막 입력이 회전인 케이스 (킥 포함)
+        for (let toRot = 0; toRot < 4; toRot++) {
+          if (toRot === fromRot) continue;
+          const nextPiece = rotations[toRot];
+          const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
+          if (!rotResult) continue;
+
+          addOrReplaceMove({
+            rotation: toRot,
+            row: rotResult.row,
+            col: rotResult.col,
+            piece: nextPiece,
+            wasRotated: true,
+            wasKicked: rotResult.kicked,
+            kickIndex: rotResult.kickIndex,
+          });
+        }
       }
     }
 
@@ -228,8 +240,9 @@ function actionPriority(action) {
   if (action === 'pc' || action.includes('_pc')) return 100;
   if (action === 'tsd') return 80;
   if (action === 'tst') return 75;
-  if (action === 'tss') return 60;
-  if (action === 'tsm') return 50;
+  if (action === 'tss') return 58;
+  if (action === 'tsm_double') return 62;
+  if (action === 'tsm') return 45;
   if (action === 'tetris') return 40;
   return 0;
 }

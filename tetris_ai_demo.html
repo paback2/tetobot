@@ -730,11 +730,13 @@ function aiStep() {
 
     currentRot = move.move.rotation;
     currentCol = move.move.col;
-    
-    const pieceMatrix = getPieceMatrix();
-    currentRow = dropRowOn(numericBoard, pieceMatrix, currentCol);
-    
-    if (currentRow < 0) {
+    currentRow = move.move.row;
+
+    // movegen에서 계산한 최종 배치(킥 반영)를 그대로 적용한다.
+    // 기존처럼 rot/col만 적용해 재드롭하면 킥 배치가 사라져 T-Spin/PC 경로가 무효화된다.
+    const pieceMatrix = move.move.piece || getPieceMatrix(currentPiece, currentRot);
+
+    if (currentRow < 0 || !canPlace(numericBoard, pieceMatrix, currentRow, currentCol)) {
         endGame();
         return;
     }

@@ -1,5 +1,24 @@
 import { PIECES } from '../game/pieces.js';
-import { canPlace } from '../game/board.js';
+import { placePiece } from '../game/board.js';
+
+
+/**
+ * 배치 좌표(좌상단)와 회전 상태에서 T 피벗 좌표를 계산한다.
+ * PIECES의 trim된 회전 매트릭스 기준 보정값을 사용한다.
+ */
+export function getTPivotFromPlacement(row, col, rotation) {
+  switch (rotation) {
+    case 1:
+      return { centerR: row + 1, centerC: col };
+    case 2:
+      return { centerR: row, centerC: col + 1 };
+    case 3:
+      return { centerR: row + 1, centerC: col + 1 };
+    case 0:
+    default:
+      return { centerR: row + 1, centerC: col + 1 };
+  }
+}
 
 
 /**
@@ -155,13 +174,16 @@ export function findTSpinCandidates(board, allMoves) {
   const candidates = [];
 
   for (const move of allMoves) {
-    const { rotation, row, col, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
-    
+    const { rotation, row, col, piece, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
+
+    const boardForCheck = piece ? placePiece(board, piece, row, col) : board;
+    const { centerR, centerC } = getTPivotFromPlacement(row, col, rotation);
+
     // T-Spin 확인
     const { isTSpin, isMini } = checkTSpin(
-      board,
-      row,
-      col,
+      boardForCheck,
+      centerR,
+      centerC,
       rotation,
       wasKicked,
       wasRotated,

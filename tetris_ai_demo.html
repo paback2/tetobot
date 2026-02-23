@@ -225,7 +225,6 @@ function dropRowOn(board, piece, col) {
 
 // --- From ai/tspin.js - Cold Clear 2 Algorithm ---
 function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, cleared = 0) {
-    // Guideline 핵심: 마지막 동작이 회전이어야 함
     if (!wasRotated) {
         return { isTSpin: false, isMini: false };
     }
@@ -242,13 +241,21 @@ function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = f
 
     const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
 
-    // 3-corner rule
     const tl = isFilled(row - 1, col - 1);
     const tr = isFilled(row - 1, col + 1);
     const bl = isFilled(row + 1, col - 1);
     const br = isFilled(row + 1, col + 1);
     const filledCorners = [tl, tr, bl, br].filter(Boolean).length;
     if (filledCorners < 3) {
+        return { isTSpin: false, isMini: false };
+    }
+
+    const cardinal = [[-1,0],[1,0],[0,-1],[0,1]];
+    let blockedCardinal = 0;
+    for (const [dr, dc] of cardinal) {
+        if (isFilled(row + dr, col + dc)) blockedCardinal++;
+    }
+    if (!wasKicked && blockedCardinal < 4) {
         return { isTSpin: false, isMini: false };
     }
 
@@ -263,11 +270,15 @@ function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = f
     }
 
     const miniByCorners = !(frontA && frontB);
-    if (miniByCorners && wasKicked) {
+    if (cleared >= 2 && miniByCorners) {
+        return { isTSpin: false, isMini: false };
+    }
+    if (cleared === 1 && miniByCorners) {
+        if (!wasKicked) return { isTSpin: false, isMini: false };
         return { isTSpin: true, isMini: true };
     }
 
-    return { isTSpin: true, isMini: false };
+    return { isTSpin: true, isMini: miniByCorners };
 }
 function getTSpinAction(isTSpin, isMini, cleared) {
     if (!isTSpin) return 'none';
@@ -289,6 +300,18 @@ function analyzeBoard(board) {
   const maxHeight = Math.max(...heights);
   return { heights, holes, bumpiness, maxHeight };
 }
+function getAttackValue(action, isB2B, b2bCount) {
+    const table = {
+        single: 0, double: 1, triple: 2, tetris: 4,
+        tsm: 0, tss: 2, tsd: 4, tst: 6,
+        tetris_pc: 10, triple_pc: 8, double_pc: 7, single_pc: 6, pc: 10,
+        tsd_pc: 12, tst_pc: 13
+    };
+    let attack = table[action] || 0;
+    const b2bEligible = ['tetris', 'tss', 'tsd', 'tst', 'tetris_pc', 'tsd_pc', 'tst_pc'].includes(action);
+    if (isB2B && b2bEligible) attack += 1 + Math.floor(Math.max(0, b2bCount) / 2);
+    return attack;
+}
 function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
     const analysis = analyzeBoard(board);
     let score = 0;
@@ -305,9 +328,10 @@ function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
     
     const actionScores = {
         tetris_pc: 15000, triple_pc: 10500, double_pc: 10300, single_pc: 10100, pc: 10000,
-        tsd: 5500, tst: 4200, tss: 4000, tsf: 3500, tsm: 1500, tetris: 2000
+        tsd: 5600, tst: 6200, tss: 1700, tsf: 3600, tsm: 650, tetris: 2200
     };
     score += actionScores[lastAction] || 0;
+    score += getAttackValue(lastAction, isB2B, b2bCount) * 260;
 
     if (isB2B) {
         score += 500;

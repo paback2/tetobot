@@ -86,6 +86,47 @@ function getColumnTransitions(board) {
   return transitions;
 }
 
+function getRowTransitions(board) {
+  let transitions = 0;
+  for (let row = 0; row < 20; row++) {
+    let prevFilled = true; // left wall
+    for (let col = 0; col < 10; col++) {
+      const filled = board[row][col] !== 0;
+      if (filled !== prevFilled) transitions++;
+      prevFilled = filled;
+    }
+    if (!prevFilled) transitions++; // right wall
+  }
+  return transitions;
+}
+
+function getAttackValue(action, isB2B, b2bCount) {
+  const attackTable = {
+    single: 0,
+    double: 1,
+    triple: 2,
+    tetris: 4,
+    tsm: 0,
+    tss: 2,
+    tsd: 4,
+    tst: 6,
+    tetris_pc: 10,
+    triple_pc: 8,
+    double_pc: 7,
+    single_pc: 6,
+    pc: 10,
+    tsd_pc: 12,
+    tst_pc: 13,
+  };
+
+  let attack = attackTable[action] ?? 0;
+  const b2bEligible = ['tetris', 'tss', 'tsd', 'tst', 'tetris_pc', 'tsd_pc', 'tst_pc'].includes(action);
+  if (isB2B && b2bEligible) {
+    attack += 1 + Math.floor(Math.max(0, b2bCount) / 2);
+  }
+  return attack;
+}
+
 function getHoleDepthPenalty(board, heights) {
   let penalty = 0;
   for (let col = 0; col < 10; col++) {
@@ -104,24 +145,24 @@ function getHoleDepthPenalty(board, heights) {
 
 const ACTION_SCORES = {
   none: 0,
-  single: -80,
-  double: 220,
-  triple: 500,
+  single: -40,
+  double: 160,
+  triple: 420,
   tetris: 1300,
-  tsmzero: 80,
-  tszero: 180,
-  tsm: 550,
-  tsm_double: 4200, // legacy alias: treat as full double
-  tss: 1100,
-  tsd: 4200,
-  tst: 4700,
-  tetris_pc: 14000,
-  triple_pc: 10800,
-  double_pc: 10400,
-  single_pc: 10100,
-  pc: 10000,
-  tsd_pc: 17000,
-  tst_pc: 16000,
+  tsmzero: 60,
+  tszero: 120,
+  tsm: 450,
+  tsm_double: 2600,
+  tss: 1400,
+  tsd: 4300,
+  tst: 5600,
+  tetris_pc: 14500,
+  triple_pc: 11200,
+  double_pc: 10800,
+  single_pc: 10400,
+  pc: 11000,
+  tsd_pc: 17800,
+  tst_pc: 18600,
 };
 
 // 모드별 점수 계산
@@ -139,6 +180,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       variance: -8,
       nearFullRows: 50,
       colTransitions: -6,
+      rowTransitions: -7,
       holeDepthPenalty: -20,
     },
     cheese: {
@@ -149,6 +191,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       variance: -5,
       nearFullRows: 100,
       colTransitions: -4,
+      rowTransitions: -5,
       holeDepthPenalty: -26,
     },
     straight: {
@@ -159,6 +202,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       variance: -10,
       nearFullRows: 80,
       colTransitions: -7,
+      rowTransitions: -8,
       holeDepthPenalty: -22,
     },
     danger: {
@@ -169,6 +213,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
       variance: -6,
       nearFullRows: 150,
       colTransitions: -5,
+      rowTransitions: -6,
       holeDepthPenalty: -30,
     }
   };
@@ -184,8 +229,10 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   score += analysis.nearFullRows * w.nearFullRows;
 
   const colTransitions = getColumnTransitions(board);
+  const rowTransitions = getRowTransitions(board);
   const holeDepthPenalty = getHoleDepthPenalty(board, analysis.heights);
   score += colTransitions * (w.colTransitions ?? -5);
+  score += rowTransitions * (w.rowTransitions ?? -6);
   score += holeDepthPenalty * (w.holeDepthPenalty ?? -20);
   
   // 우물 잠재력 보너스 (높음 = 좋음)
@@ -193,6 +240,10 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
 
   // 액션별 점수 (Cold Clear 계열처럼 액션 보상과 보드 페널티를 분리)
   score += ACTION_SCORES[lastAction] ?? 0;
+  // 공격량 기반 보너스(cold-clear 계열 의사결정 반영)
+  const attack = getAttackValue(lastAction, isB2B, b2bCount);
+  score += attack * 320;
+
   // Perfect Clear 보너스 (매우 높음)
   if (lastAction.includes("_pc") || lastAction === "pc") {
     score += 4500;

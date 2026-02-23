@@ -9,12 +9,12 @@ import { attemptRotation } from '../game/rotation.js';
 // ============================================================
 
 // Lookahead 설정 (Cold Clear 2 기반)
-const BASE_LOOKAHEAD_DEPTH = 5;      // 기본 깊이 (Cold Clear: 6)
-const BASE_BEAM_WIDTH = 16;          // 기본 빔 너비 (Cold Clear: 8-16)
-const PERFECT_CLEAR_DEPTH = 6;       // Perfect Clear 전용 깊이
-const PERFECT_CLEAR_BEAM = 20;       // PC 전용 빔 너비
-const TSPIN_DEPTH = 5;               // T-Spin 전용 깊이
-const TSPIN_BEAM = 12;               // T-Spin 전용 빔
+const BASE_LOOKAHEAD_DEPTH = 6;      // 기본 깊이 (Cold Clear 계열처럼 깊게)
+const BASE_BEAM_WIDTH = 28;          // 기본 빔 너비 확장
+const PERFECT_CLEAR_DEPTH = 8;       // Perfect Clear 전용 깊이
+const PERFECT_CLEAR_BEAM = 42;       // PC 전용 빔 너비
+const TSPIN_DEPTH = 7;               // T-Spin 전용 깊이
+const TSPIN_BEAM = 24;               // T-Spin 전용 빔
 
 // 게임 상태를 문자열로 인코딩 (Memoization용)
 function boardToKey(board) {
@@ -59,7 +59,7 @@ function findAllMovePositions(board, pieceType) {
         const key = `${fromRot}-${col}-${dropRow}`;
         if (!seen.has(key)) {
           seen.add(key);
-          allMoves.push({ rotation: fromRot, row: dropRow, col, piece, wasKicked: false });
+          allMoves.push({ rotation: fromRot, row: dropRow, col, piece, wasKicked: false, kickIndex: 0 });
         }
       }
     }
@@ -100,7 +100,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
 
 
     // T-Spin 감지 (반드시 회전+킥이 발생한 경우만, 줄을 지운 경우만)
-    if (pieceType === 'T' && wasKicked && cleared > 0) {
+    if (pieceType === 'T' && cleared > 0) {
       // cold-clear-2/cobra-tetrio-movegen 방식: 회전 상태별 중심 좌표 정확 계산
       let centerR, centerC;
       switch (rotation) {
@@ -125,7 +125,8 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
           centerC = col + 1;
       }
 
-      const tspinResult = checkTSpin(board, centerR, centerC, rotation, true, cleared, kickIndex);
+      const wasRotated = wasKicked || rotation !== 0;
+      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex || 0);
       if (tspinResult.isTSpin) {
         isTSpin = true;
         isMini = tspinResult.isMini;
@@ -237,8 +238,9 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
     return result;
   }
 
-  // Beam search: 상위 K개만 재귀 탐색
-  const candidates = moves.slice(0, Math.min(beamWidth, moves.length));
+  // Beam search: 상위 K개만 재귀 탐색 (초반은 넓게, 후반은 집중)
+  const depthBeamWidth = Math.max(8, Math.floor(beamWidth - depth * 3));
+  const candidates = moves.slice(0, Math.min(depthBeamWidth, moves.length));
   
   let bestScore = -Infinity;
   let bestMove = null;
@@ -269,7 +271,7 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
       beamWidth
     );
 
-    const totalScore = candidate.score + futureResult.score * 0.9;  // Future discount
+    const totalScore = candidate.score * 0.55 + futureResult.score * 0.95;
 
     if (totalScore > bestScore) {
       bestScore = totalScore;

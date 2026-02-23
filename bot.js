@@ -1,6 +1,7 @@
 import { detectMode } from './ai/modes.js';
 import { evaluateBoard } from './ai/scoring.js';
 import { findBestMoveAdvanced } from './ai/moves-advanced.js';
+import { findBestMoveWithHold } from './ai/moves.js';
 import { getColumnHeights, countHoles, performHold } from './game/board.js';
 
 // ============================================
@@ -86,7 +87,6 @@ class GameState {
 
     // cold-clear-2/cobra-tetrio-movegen 스타일: hold, perfect clear, tspin, beam/depth 모두 지원
     // findBestMoveWithHold(board, pieces, heldPiece, canHold, isB2B, mode)
-    const { findBestMoveWithHold } = require('./ai/moves.js');
     const move = findBestMoveWithHold(this.board, pieces, this.heldPiece, this.canHold, this.isB2B, mode);
 
     // usedHold가 true면 자동으로 performHoldAction 호출 (상태 동기화)

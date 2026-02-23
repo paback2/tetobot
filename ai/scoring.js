@@ -69,6 +69,28 @@ function analyzeBoard(board) {
   };
 }
 
+
+const ACTION_SCORES = {
+  none: 0,
+  single: -80,
+  double: 220,
+  triple: 500,
+  tetris: 1300,
+  tsmzero: 80,
+  tszero: 180,
+  tsm: 700,
+  tss: 1400,
+  tsd: 3200,
+  tst: 4700,
+  tetris_pc: 14000,
+  triple_pc: 10800,
+  double_pc: 10400,
+  single_pc: 10100,
+  pc: 10000,
+  tsd_pc: 17000,
+  tst_pc: 16000,
+};
+
 // 모드별 점수 계산
 export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   const analysis = analyzeBoard(board);
@@ -123,27 +145,8 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   // 우물 잠재력 보너스 (높음 = 좋음)
   score += analysis.wellPotential * 2;
 
-  // 액션별 점수 (모드 무관)
-  // Full T-Spin 점수표:
-  //   TSD (2줄): 5500 - 가장 효율적, 가장 흔한 T-Spin (황금 배치)
-  //   TST (3줄): 4200 - 3줄 클리어
-  //   TSS (1줄): 4000 - 1줄이지만 매우 흔하고 실용적
-  //   TSF (2줄): 3500 - Fin 세팅 (한쪽 돌출), 기술적 가치
-  // Mini T-Spin:
-  //   TSM (1줄): 1500 - Mini
-  // Perfect Clear:
-  if (lastAction === "tetris_pc") score += 15000;
-  else if (lastAction === "triple_pc") score += 10500;
-  else if (lastAction === "double_pc") score += 10300;
-  else if (lastAction === "single_pc") score += 10100;
-  else if (lastAction === "pc") score += 10000;
-  else if (lastAction === "tsd") score += 5500;   // T-Spin Double
-  else if (lastAction === "tst") score += 4200;   // T-Spin Triple
-  else if (lastAction === "tss") score += 4000;   // T-Spin Single
-  else if (lastAction === "tsf") score += 3500;   // T-Spin Fin
-  else if (lastAction === "tsm") score += 1500;   // T-Spin Mini
-  else if (lastAction === "tetris") score += 2000;
-
+  // 액션별 점수 (Cold Clear 계열처럼 액션 보상과 보드 페널티를 분리)
+  score += ACTION_SCORES[lastAction] ?? 0;
   // Perfect Clear 보너스 (매우 높음)
   if (lastAction.includes("_pc") || lastAction === "pc") {
     score += 20000;  // 매우 높은 점수
@@ -154,17 +157,16 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   // B2B 보너스
   // B2B 유지: T-Spin, Tetris, PC 동반 액션 모두 포함
   if (isB2B) {
-    score += 500;
-    // TSD 연속 보너스 (특별한 기술)
-    if (lastAction === "tsd") score += 1000;
+    score += 450 + Math.min(1200, b2bCount * 75);
+    if (lastAction === "tsd" || lastAction === "tst") score += 600;
   }
 
   // 모드별 추가 점수
   if (mode === "safe") {
     // 안전 모드: PC 탐색 + T-Spin 극대화
-    if (lastAction === "tsd") score += 500;
-    if (lastAction.includes("_pc")) score += 5000;  // PC 추가 보너스
-    if (lastAction === "tsf" || lastAction === "tsf_pc") score += 500;
+    if (lastAction === "tsd") score += 900;
+    if (lastAction === "tst") score += 700;
+    if (lastAction.includes("_pc") || lastAction === "pc") score += 4000;
   }
 
   if (mode === "cheese") {
@@ -189,7 +191,7 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
     if (lastAction === "tst" || lastAction === "tst_pc") score += 4000;   // TST 마무리
     if (lastAction === "tetris" || lastAction === "tetris_pc") score += 3500; // Tetris 마무리
     if (lastAction.includes("_pc")) score += 15000;  // PC로 대역이 공격 중단 (최고의 상황)
-    if (lastAction === "single") score -= 5000; // Single 마무리 금지
+    if (lastAction === "single") score -= 3500; // Single 마무리 금지
     score += 1000; // 위기 탈출 시도 보너스
   }
 

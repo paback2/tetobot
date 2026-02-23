@@ -3,8 +3,8 @@ import { canPlace, placePiece, clearLines, dropRowOn, performHold, isHoldAvailab
 import { evaluateBoard } from './scoring.js';
 import { checkTSpin, getTSpinAction } from './tspin.js';
 
-const LOOKAHEAD_DEPTH = 4;  // Cold Clear 스타일: 더 깊은 lookahead
-const BEAM_WIDTH = 12;  // Top candidates to explore
+const LOOKAHEAD_DEPTH = 6;  // Cold Clear 스타일: 더 깊은 lookahead
+const BEAM_WIDTH = 24;  // Top candidates to explore
 
 function isPerfectClear(board) {
   return board.every(row => row.every(cell => cell === 0));
@@ -60,7 +60,8 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
       if (rotation === 2) { centerR = row; }  // Rotation 2만 row 조정
       
       // T-piece을 놓은 후의 board에서 확인해야 함!
-      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, false);
+      const wasRotated = rotation !== 0;
+      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, false, wasRotated, 0);
       if (tspinResult.isTSpin && cleared > 0) {  // T-Spin은 line clear와 함께만 유효
         isTSpin = true;
         isMini = tspinResult.isMini;
@@ -191,7 +192,9 @@ function findBestMoveRecursive(board, pieces, isB2B, mode) {
   }
 
   moves.sort((a, b) => b.score - a.score);
-  const candidates = moves.slice(0, BEAM_WIDTH);
+  const depth = Math.max(0, LOOKAHEAD_DEPTH - nextPieces.length - 1);
+  const dynamicBeam = Math.max(8, BEAM_WIDTH - depth * 3);
+  const candidates = moves.slice(0, dynamicBeam);
   
   let bestScore = -Infinity;
   let bestMove = candidates.length > 0 ? candidates[0].move : null;
@@ -199,7 +202,7 @@ function findBestMoveRecursive(board, pieces, isB2B, mode) {
 
   for (const candidate of candidates) {
     const futureResult = findBestMoveRecursive(candidate.board, nextPieces, candidate.b2b, mode);
-    const totalScore = futureResult.score; // IGNORE intermediate score, only look at the final board state
+    const totalScore = candidate.score * 0.55 + futureResult.score * 0.95;
 
     if (totalScore > bestScore) {
       bestScore = totalScore;
@@ -247,110 +250,66 @@ export function findBestMoveWithHold(board, pieces, heldPiece, canHold, isB2B, m
   const currentPiece = pieces[0];
   const remainingPieces = pieces.slice(1);
 
-  // 홀드하지 않은 경우
+  const evaluateBranch = (candidate, futurePieces, usedHold, extra = {}) => {
+    const lookahead = futurePieces.slice(0, LOOKAHEAD_DEPTH - 1);
+    const future = findBestMoveRecursive(candidate.board, lookahead, candidate.b2b, mode);
+    const branchScore = candidate.score * 0.55 + future.score * 0.95;
+
+    return {
+      ...candidate.move,
+      action: candidate.action,
+      score: branchScore,
+      board: candidate.board,
+      b2b: candidate.b2b,
+      usedHold,
+      isTSpinOpportunity: candidate.isTSpin && !candidate.isMini,
+      isPCOpportunity: candidate.action.includes('_pc') || candidate.action === 'pc',
+      ...extra
+    };
+  };
+
+  // 1) no hold
   const noHoldMoves = _findMovesForPiece(board, currentPiece, isB2B, mode);
   let bestNoHold = null;
-  let bestNoHoldScore = -Infinity;
-
-  if (noHoldMoves.length > 0) {
-    for (const move of noHoldMoves) {
-      if (move.score > bestNoHoldScore) {
-        bestNoHoldScore = move.score;
-        // T-Spin이나 Perfect Clear 가능성을 기억
-        const isTSpinOpportunity = move.isTSpin && !move.isMini;
-        const isPCOpportunity = move.action.includes('_pc') || move.action === 'pc';
-        
-        bestNoHold = {
-          ...move.move,
-          action: move.action,
-          score: move.score,
-          board: move.board,
-          b2b: move.b2b,
-          usedHold: false,
-          isTSpinOpportunity,
-          isPCOpportunity
-        };
-      }
+  for (const move of noHoldMoves.slice(0, Math.min(BEAM_WIDTH, noHoldMoves.length))) {
+    const evaluated = evaluateBranch(move, remainingPieces, false);
+    if (!bestNoHold || evaluated.score > bestNoHold.score) {
+      bestNoHold = evaluated;
     }
   }
 
-  // 홀드한 경우 평가
+  // 2) hold path
   let bestWithHold = null;
-  let bestWithHoldScore = -Infinity;
 
   if (canHold && heldPiece !== null) {
-    // 홀드된 피스를 사용
-    const withHoldMoves = _findMovesForPiece(board, heldPiece, isB2B, mode);
-    if (withHoldMoves.length > 0) {
-      for (const move of withHoldMoves) {
-        // T-Spin 또는 Perfect Clear를 실행 가능하면 Hold 페널티 감소
-        let holdPenalty = 75;
-        if (move.isTSpin && !move.isMini) {
-          holdPenalty = 25;  // TSD 등 Full T-Spin이면 페널티 적음
-        }
-        if (move.action.includes('_pc') || move.action === 'pc') {
-          holdPenalty = 0;   // Perfect Clear이면 페널티 없음
-        }
-        
-        const adjustedScore = move.score - holdPenalty;
-        if (adjustedScore > bestWithHoldScore) {
-          bestWithHoldScore = adjustedScore;
-          bestWithHold = {
-            ...move.move,
-            action: move.action,
-            score: adjustedScore,
-            board: move.board,
-            b2b: move.b2b,
-            usedHold: true,
-            swappedPiece: currentPiece,
-            isTSpinOpportunity: move.isTSpin && !move.isMini,
-            isPCOpportunity: move.action.includes('_pc') || move.action === 'pc'
-          };
-        }
+    const holdMoves = _findMovesForPiece(board, heldPiece, isB2B, mode);
+    for (const move of holdMoves.slice(0, Math.min(BEAM_WIDTH, holdMoves.length))) {
+      const evaluated = evaluateBranch(move, remainingPieces, true, { swappedPiece: currentPiece });
+      // hold 기본 페널티. 다만 T-Spin/PC는 페널티 완화
+      const holdPenalty = evaluated.isPCOpportunity ? 0 : (evaluated.isTSpinOpportunity ? 20 : 70);
+      evaluated.score -= holdPenalty;
+      if (!bestWithHold || evaluated.score > bestWithHold.score) {
+        bestWithHold = evaluated;
       }
     }
   } else if (canHold && heldPiece === null && remainingPieces.length > 0) {
-    // 첫 홀드 사용 - 현재 피스를 홀드하고 다음 피스를 받음
     const nextPiece = remainingPieces[0];
-    const nextPieceMoves = _findMovesForPiece(board, nextPiece, isB2B, mode);
-    if (nextPieceMoves.length > 0) {
-      for (const move of nextPieceMoves) {
-        // T-Spin 또는 Perfect Clear를 활용할 수 있다면 페널티 감소
-        let holdPenalty = 100;
-        if (move.isTSpin && !move.isMini) {
-          holdPenalty = 40;  // TSD 가능하면 첫 홀드도 사용
-        }
-        if (move.action.includes('_pc') || move.action === 'pc') {
-          holdPenalty = 10;   // Perfect Clear 설정이면 거의 페널티 없음
-        }
-        
-        const adjustedScore = move.score - holdPenalty;
-        if (adjustedScore > bestWithHoldScore) {
-          bestWithHoldScore = adjustedScore;
-          bestWithHold = {
-            ...move.move,
-            action: move.action,
-            score: adjustedScore,
-            board: move.board,
-            b2b: move.b2b,
-            usedHold: true,
-            heldPiece: currentPiece,
-            nextPiece: nextPiece,
-            isTSpinOpportunity: move.isTSpin && !move.isMini,
-            isPCOpportunity: move.action.includes('_pc') || move.action === 'pc'
-          };
-        }
+    const nextMoves = _findMovesForPiece(board, nextPiece, isB2B, mode);
+    const futureAfterNext = remainingPieces.slice(1);
+
+    for (const move of nextMoves.slice(0, Math.min(BEAM_WIDTH, nextMoves.length))) {
+      const evaluated = evaluateBranch(move, futureAfterNext, true, { heldPiece: currentPiece, nextPiece });
+      const holdPenalty = evaluated.isPCOpportunity ? 5 : (evaluated.isTSpinOpportunity ? 25 : 90);
+      evaluated.score -= holdPenalty;
+      if (!bestWithHold || evaluated.score > bestWithHold.score) {
+        bestWithHold = evaluated;
       }
     }
   }
 
-  // 더 나은 수를 선택
-  // cold-clear-2/cobra-movegen 스타일: 항상 최고 점수만 선택 (플래그 기반 우선순위 제거)
   if (bestNoHold && bestWithHold) {
     return bestWithHold.score > bestNoHold.score ? bestWithHold : bestNoHold;
-  } else if (bestWithHold && bestWithHold.score > -Infinity) {
-    return bestWithHold;
-  } else {
-    return bestNoHold;
   }
+
+  return bestWithHold || bestNoHold;
 }

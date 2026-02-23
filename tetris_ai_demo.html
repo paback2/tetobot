@@ -424,8 +424,8 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
             // Rotation 3: [[0,1], [1,1], [0,1]] → 중심 (1,1) 상대좌표
             
             let centerR = row + 1, centerC = col + 1;
-            if (rotation === 2) {
-                centerR = row;
+            if (rotation === 1) {
+                centerC = col;
             }
             
             // T-piece을 놓은 후의 board에서 확인해야 함!
@@ -699,7 +699,7 @@ function aiStep() {
             // 첫 홀드: 현재 피스를 홀드 박스로 이동
             holdPiece = currentPiece;
             // 큐에서 새 피스 받기
-            currentPiece = nextQueue[0];
+            currentPiece = nextQueue.shift();
             // 7-bag 규칙에서는 동일한 타입이 큐에 여러 번 존재할 수 있으므로
             // 타입 기준 필터링으로 큐를 삭제하면 bag 분포가 깨진다.
             // 7-bag 보충

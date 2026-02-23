@@ -13,15 +13,17 @@ function isPerfectClear(board) {
 }
 
 function getTCenter(row, col, rotation) {
+  // NOTE: We use trimmed piece matrices in PIECES, so offsets differ by rotation.
+  // These offsets map back to the true T pivot used by the 3-corner check.
   switch (rotation) {
     case 0:
       return { centerR: row + 1, centerC: col + 1 };
     case 1:
       return { centerR: row + 1, centerC: col };
     case 2:
-      return { centerR: row, centerC: col + 1 };
+      return { centerR: row + 1, centerC: col + 1 };
     case 3:
-      return { centerR: row, centerC: col };
+      return { centerR: row + 1, centerC: col + 1 };
     default:
       return { centerR: row + 1, centerC: col + 1 };
   }

@@ -51,7 +51,7 @@ function findAllMovePositions(board, pieceType) {
             const key = `${toRot}-${rotResult.col}-${rotResult.row}`;
             if (!seen.has(key)) {
               seen.add(key);
-              allMoves.push({ rotation: toRot, row: rotResult.row, col: rotResult.col, piece: nextPiece, wasKicked: rotResult.kicked, kickIndex: rotResult.kickIndex });
+              allMoves.push({ rotation: toRot, row: rotResult.row, col: rotResult.col, piece: nextPiece, wasRotated: true, wasKicked: rotResult.kicked, kickIndex: rotResult.kickIndex });
             }
           }
         }
@@ -59,7 +59,7 @@ function findAllMovePositions(board, pieceType) {
         const key = `${fromRot}-${col}-${dropRow}`;
         if (!seen.has(key)) {
           seen.add(key);
-          allMoves.push({ rotation: fromRot, row: dropRow, col, piece, wasKicked: false, kickIndex: 0 });
+          allMoves.push({ rotation: fromRot, row: dropRow, col, piece, wasRotated: false, wasKicked: false, kickIndex: 0 });
         }
       }
     }
@@ -74,7 +74,7 @@ function findAllMovePositions(board, pieceType) {
             const key = `${rot}-${col}-${row}`;
             if (!seen.has(key)) {
               seen.add(key);
-              allMoves.push({ rotation: rot, row, col, piece });
+              allMoves.push({ rotation: rot, row, col, piece, wasRotated: false, wasKicked: false, kickIndex: 0 });
             }
           }
         }
@@ -90,7 +90,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
   const scoredMoves = [];
 
   for (const move of pieceMoves) {
-    const { rotation, row, col, piece, wasKicked, kickIndex } = move;
+    const { rotation, row, col, piece, wasRotated = false, wasKicked = false, kickIndex = 0 } = move;
     const boardWithPiece = placePiece(board, piece, row, col);
     const { board: clearedBoard, cleared } = clearLines(boardWithPiece);
 
@@ -113,19 +113,18 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
           centerC = col;
           break;
         case 2:
-          centerR = row;
+          centerR = row + 1;
           centerC = col + 1;
           break;
         case 3:
-          centerR = row;
-          centerC = col;
+          centerR = row + 1;
+          centerC = col + 1;
           break;
         default:
           centerR = row + 1;
           centerC = col + 1;
       }
 
-      const wasRotated = wasKicked || rotation !== 0;
       const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex || 0);
       if (tspinResult.isTSpin) {
         isTSpin = true;

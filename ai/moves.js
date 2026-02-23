@@ -246,6 +246,16 @@ function actionPriority(action) {
   return 0;
 }
 
+
+function sortForSpecialPath(candidates) {
+  return [...candidates].sort((a, b) => {
+    const pa = actionPriority(a.action);
+    const pb = actionPriority(b.action);
+    if (pb !== pa) return pb - pa;
+    return b.score - a.score;
+  });
+}
+
 function findBestMoveRecursive(board, pieces, isB2B, mode, depth = 0) {
   if (pieces.length === 0 || depth >= LOOKAHEAD_DEPTH) {
     return { score: evaluateBoard(board, 'none', isB2B, 0, mode), move: null, action: 'none' };
@@ -284,7 +294,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   const currentPiece = pieces[0];
   const options = [];
 
-  const noHoldMoves = selectStrategicCandidates(_findMovesForPiece(board, currentPiece, isB2B, mode), SPECIAL_BEAM);
+  const noHoldMoves = sortForSpecialPath(_findMovesForPiece(board, currentPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
   for (const candidate of noHoldMoves) {
     options.push({
       ...candidate,
@@ -307,7 +317,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
 
   // 홀드 박스에 피스가 있는 경우
   if (heldPiece !== null) {
-    const holdMoves = selectStrategicCandidates(_findMovesForPiece(board, heldPiece, isB2B, mode), SPECIAL_BEAM);
+    const holdMoves = sortForSpecialPath(_findMovesForPiece(board, heldPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
     for (const candidate of holdMoves) {
       options.push({
         ...candidate,
@@ -329,7 +339,7 @@ function buildTurnOptions(board, pieces, heldPiece, canHold, isB2B, mode) {
   } else if (pieces.length > 1) {
     // 홀드 박스가 비어있으면 다음 피스를 현재 턴에 사용
     const nextPiece = pieces[1];
-    const nextPieceMoves = selectStrategicCandidates(_findMovesForPiece(board, nextPiece, isB2B, mode), SPECIAL_BEAM);
+    const nextPieceMoves = sortForSpecialPath(_findMovesForPiece(board, nextPiece, isB2B, mode)).slice(0, SPECIAL_BEAM * 2);
     for (const candidate of nextPieceMoves) {
       options.push({
         ...candidate,

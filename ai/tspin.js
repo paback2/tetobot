@@ -17,7 +17,7 @@ import { canPlace } from '../game/board.js';
 export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = false, kickIndex = 0, cleared = 0, debug = false) {
   // Guideline 기본 조건: 마지막 입력이 회전이어야 한다.
   if (!wasRotated) {
-    if (debug) console.log('[T-Spin] Last action was not a rotation, not a T-Spin');
+    if (debug) console.log('[T-Spin] Last action was not a rotation');
     return { isTSpin: false, isMini: false };
   }
 
@@ -32,7 +32,7 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   }
 
   if (occupied < 3) {
-    if (debug) console.log('[T-Spin] Less than 3 corners, not a T-Spin');
+    if (debug) console.log('[T-Spin] Less than 3 occupied corners');
     return { isTSpin: false, isMini: false };
   }
 
@@ -144,7 +144,7 @@ export function findTSpinCandidates(board, allMoves) {
   const candidates = [];
 
   for (const move of allMoves) {
-    const { rotation, row, col, kicked } = move;
+    const { rotation, row, col, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
     
     // T-Spin 확인
     const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0, 0);

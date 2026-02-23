@@ -163,7 +163,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
 
 
     // T-Spin 감지 (반드시 회전+킥이 발생한 경우만, 줄을 지운 경우만)
-    if (pieceType === 'T' && cleared > 0) {
+    if (pieceType === 'T' && cleared > 0 && wasRotated && wasKicked) {
       // cold-clear-2/cobra-tetrio-movegen 방식: 회전 상태별 중심 좌표 정확 계산
       let centerR, centerC;
       switch (rotation) {
@@ -187,7 +187,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
         centerC,
         rotation,
         wasKicked,
-        wasRotated,
+        true,
         kickIndex || 0
       );
       if (tspinResult.isTSpin) {

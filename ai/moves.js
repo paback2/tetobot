@@ -159,9 +159,9 @@ function _findMovesForPiece(board, pieceType, isB2B, mode) {
     let isMini = false;
     let extraBonus = 0;
 
-    if (pieceType === 'T' && cleared > 0) {
+    if (pieceType === 'T' && cleared > 0 && wasRotated && wasKicked) {
       const { centerR, centerC } = getTCenter(row, col, rotation);
-      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, wasRotated, kickIndex);
+      const tspinResult = checkTSpin(boardWithPiece, centerR, centerC, rotation, wasKicked, true, kickIndex);
       if (tspinResult.isTSpin) {
         isTSpin = true;
         isMini = tspinResult.isMini;

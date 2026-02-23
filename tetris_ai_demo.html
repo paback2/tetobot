@@ -541,8 +541,8 @@ function aiStep() {
         return;
     }
 
-    currentRot = move.rotation;
-    currentCol = move.col;
+    currentRot = move.move.rotation;
+    currentCol = move.move.col;
     
     const pieceMatrix = getPieceMatrix();
     currentRow = dropRowOn(numericBoard, pieceMatrix, currentCol);

@@ -51,24 +51,36 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   const bl = isFilled(row + 1, col - 1);
   const br = isFilled(row + 1, col + 1);
 
-  // T가 바라보는 방향(front) 코너 2개
+  // T가 바라보는 방향(front) / 반대(back) 코너 2개
   let frontA = false;
   let frontB = false;
+  let backA = false;
+  let backB = false;
   switch (rotation) {
     case 0: // up
       frontA = tl; frontB = tr;
+      backA = bl; backB = br;
       break;
     case 1: // right
       frontA = tr; frontB = br;
+      backA = tl; backB = bl;
       break;
     case 2: // down
       frontA = bl; frontB = br;
+      backA = tl; backB = tr;
       break;
     case 3: // left
       frontA = tl; frontB = bl;
+      backA = tr; backB = br;
       break;
     default:
       frontA = tl; frontB = tr;
+      backA = bl; backB = br;
+  }
+
+  // Cobra/Guideline 실전 판정에 가깝게: back 코너 2개가 막혀야 스핀으로 인정
+  if (!(backA && backB)) {
+    return { isTSpin: false, isMini: false };
   }
 
   // front 2코너가 모두 막히면 Full, 아니면 Mini

@@ -252,12 +252,17 @@ function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = f
     const bl = isFilled(row + 1, col - 1);
     const br = isFilled(row + 1, col + 1);
 
-    // T가 바라보는 방향(front) 코너 2개
+    // T가 바라보는 방향(front) / 반대(back) 코너 2개
     let frontA = false, frontB = false;
-    if (rotation === 0) { frontA = tl; frontB = tr; }
-    else if (rotation === 1) { frontA = tr; frontB = br; }
-    else if (rotation === 2) { frontA = bl; frontB = br; }
-    else { frontA = tl; frontB = bl; }
+    let backA = false, backB = false;
+    if (rotation === 0) { frontA = tl; frontB = tr; backA = bl; backB = br; }
+    else if (rotation === 1) { frontA = tr; frontB = br; backA = tl; backB = bl; }
+    else if (rotation === 2) { frontA = bl; frontB = br; backA = tl; backB = tr; }
+    else { frontA = tl; frontB = bl; backA = tr; backB = br; }
+
+    if (!(backA && backB)) {
+        return { isTSpin: false, isMini: false };
+    }
 
     const isMini = !(frontA && frontB);
     return { isTSpin: true, isMini };

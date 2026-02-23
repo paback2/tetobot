@@ -9,11 +9,11 @@ import { placePiece } from '../game/board.js';
 export function getTPivotFromPlacement(row, col, rotation) {
   switch (rotation) {
     case 1:
-      return { centerR: row + 1, centerC: col + 1 };
+      return { centerR: row + 1, centerC: col };
     case 2:
       return { centerR: row, centerC: col + 1 };
     case 3:
-      return { centerR: row + 1, centerC: col };
+      return { centerR: row + 1, centerC: col + 1 };
     case 0:
     default:
       return { centerR: row + 1, centerC: col + 1 };

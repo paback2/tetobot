@@ -254,7 +254,8 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
 
   // Memoization 확인
   const boardKey = boardToKey(board);
-  const cacheKey = `${boardKey}:${currentPiece}:${depth}:${isB2B}`;
+  const queueKey = pieces.join(',');
+  const cacheKey = `${boardKey}:${queueKey}:${depth}:${isB2B}`;
   
   if (evalCache.has(cacheKey)) {
     return evalCache.get(cacheKey);

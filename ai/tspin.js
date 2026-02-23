@@ -1,5 +1,24 @@
 import { PIECES } from '../game/pieces.js';
-import { canPlace } from '../game/board.js';
+import { placePiece } from '../game/board.js';
+
+
+/**
+ * 배치 좌표(좌상단)와 회전 상태에서 T 피벗 좌표를 계산한다.
+ * PIECES의 trim된 회전 매트릭스 기준 보정값을 사용한다.
+ */
+export function getTPivotFromPlacement(row, col, rotation) {
+  switch (rotation) {
+    case 1:
+      return { centerR: row + 1, centerC: col };
+    case 2:
+      return { centerR: row, centerC: col + 1 };
+    case 3:
+      return { centerR: row + 1, centerC: col + 1 };
+    case 0:
+    default:
+      return { centerR: row + 1, centerC: col + 1 };
+  }
+}
 
 /**
  * Tetris Guideline T-Spin 감지
@@ -55,23 +74,15 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: false };
   }
 
-  // 라인을 2줄 이상 지운 T-Spin은 Full로 본다 (가이드라인 실전 룰에 맞춤)
+  // Mini는 1줄(또는 0줄) 상황에서만 허용하고,
+  // 2줄 이상 클리어는 Full T-Spin으로 처리한다.
   if (cleared >= 2) {
     return { isTSpin: true, isMini: false };
   }
 
-  // SRS 1/2 킥은 Mini 성격이 강하다.
-  if (wasKicked && (kickIndex === 1 || kickIndex === 2)) {
-    return { isTSpin: true, isMini: true };
-  }
-
-  // 싱글 라인 클리어에서 무킥 회전은 Mini로 보수 분류하여
-  // Mini가 T-Spin Single로 과대 분류되는 현상을 방지한다.
-  if (cleared === 1 && !wasKicked) {
-    return { isTSpin: true, isMini: true };
-  }
-
-  // 기본 front-corner 규칙: 앞쪽 두 코너 중 하나라도 비면 Mini
+  // 기본 front-corner 규칙을 우선 적용한다.
+  // 앞쪽 두 코너가 모두 차 있으면 Full, 아니면 Mini.
+  // (SRS test-5는 위에서 Full로 강제 처리)
   return { isTSpin: true, isMini: frontOccupied < 2 };
 }
 
@@ -91,7 +102,7 @@ export function getTSpinAction(isTSpin, isMini, cleared) {
     switch (cleared) {
       case 0: return 'tsmzero';  // Mini 0-clear
       case 1: return 'tsm';       // Mini Single
-      case 2: return 'tsm_double'; // Mini Double (Full 취급)
+      case 2: return 'tsd';       // Mini Double은 별도 분류하지 않고 Full Double로 처리
       default: return 'tsm';
     }
   }
@@ -150,10 +161,22 @@ export function findTSpinCandidates(board, allMoves) {
   const candidates = [];
 
   for (const move of allMoves) {
-    const { rotation, row, col, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
-    
+    const { rotation, row, col, piece, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
+
+    const boardForCheck = piece ? placePiece(board, piece, row, col) : board;
+    const { centerR, centerC } = getTPivotFromPlacement(row, col, rotation);
+
     // T-Spin 확인
-    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0, 0);
+    const { isTSpin, isMini } = checkTSpin(
+      boardForCheck,
+      centerR,
+      centerC,
+      rotation,
+      wasKicked,
+      wasRotated,
+      kickIndex,
+      0,
+    );
     
     if (isTSpin) {
       const isFin = detectTSpinFin(board, row, col, rotation);

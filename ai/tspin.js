@@ -63,8 +63,16 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
   }
 
   // 킥 기반 보정:
-  // SRS 1/2번 킥은 mini 가능성이 높고, 3/4번은 full 경향이 강함.
-  if (kickIndex === 3) return { isTSpin: true, isMini: false };
+  // SRS 3/4번 킥은 특수 벽킥으로 Full 경향이 매우 강함.
+  if (kickIndex === 3 || kickIndex === 4) return { isTSpin: true, isMini: false };
+
+  // 무킥(0번) 회전은 오탐 방지를 위해 Mini로 강하게 분류.
+  // 실제 Full로 인정되는 예외 패턴도 있으나, 엔진의 안정성을 위해 보수적으로 처리한다.
+  if (!wasKicked && kickIndex === 0) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  // 1/2번 킥은 front corner 점유로 mini/full 분류
   if ((kickIndex === 1 || kickIndex === 2) && frontOccupied < 2) {
     return { isTSpin: true, isMini: true };
   }

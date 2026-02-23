@@ -35,8 +35,9 @@ function actionPriorityBoost(action) {
   if (action === 'pc' || action.includes('_pc')) return 120000;
   if (action === 'tsd' || action === 'tsd_pc') return 18000;
   if (action === 'tst' || action === 'tst_pc') return 14000;
-  if (action === 'tss' || action === 'tss_pc') return 9000;
-  if (action === 'tsm' || action === 'tsm_pc') return 6000;
+  if (action === 'tss' || action === 'tss_pc') return 7000;
+  if (action === 'tsm_double' || action === 'tsm_double_pc') return 8000;
+  if (action === 'tsm' || action === 'tsm_pc') return 4500;
   if (action === 'tetris' || action === 'tetris_pc') return 5000;
   return 0;
 }

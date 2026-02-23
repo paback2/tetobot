@@ -1,7 +1,7 @@
 import { PIECES } from '../game/pieces.js';
 import { canPlace, placePiece, clearLines, dropRowOn } from '../game/board.js';
 import { evaluateBoard } from './scoring.js';
-import { checkTSpin, getTSpinAction } from './tspin.js';
+import { checkTSpin, getTSpinAction, getTPivotFromPlacement } from './tspin.js';
 import { attemptRotation } from '../game/rotation.js';
 
 // ============================================================
@@ -164,22 +164,8 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
 
     // T-Spin 감지 (반드시 회전+킥이 발생한 경우만, 줄을 지운 경우만)
     if (pieceType === 'T' && cleared > 0 && wasRotated) {
-      // cold-clear-2/cobra-tetrio-movegen 방식: 회전 상태별 중심 좌표 정확 계산
-      let centerR, centerC;
-      switch (rotation) {
-        case 1:
-          centerR = row + 1;
-          centerC = col;
-          break;
-        case 3:
-          centerR = row + 1;
-          centerC = col + 1;
-          break;
-        case 0:
-        default:
-          centerR = row + 1;
-          centerC = col + 1;
-      }
+      // 회전 상태별 trim 보정 피벗 좌표
+      const { centerR, centerC } = getTPivotFromPlacement(row, col, rotation);
 
       const tspinResult = checkTSpin(
         boardWithPiece,

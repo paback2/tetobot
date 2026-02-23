@@ -50,14 +50,26 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     if (isFilled(row + dx, col + dy)) frontOccupied++;
   }
 
-  // 특수 벽킥은 Full 우선
-  if (kickIndex === 3 || kickIndex === 4) {
+  // SRS 5번 테스트(인덱스 4)는 일반적으로 Full로 취급
+  if (kickIndex === 4) {
     return { isTSpin: true, isMini: false };
   }
 
-  // 일반 킥/무킥 모두 front 코너 2개가 막히면 Full, 아니면 Mini
-  // (엔진 내부 movegen에서 line clear T-Spin은 wasKicked 조건으로 추가 필터링)
-  return { isTSpin: true, isMini: frontOccupied < 2 };
+  // Mini 판단: SRS 일반 킥(1/2)은 mini 성격이 강하므로 우선 Mini로 본다.
+  // 이는 실제 플레이에서 Mini가 TSS로 과대분류되는 문제를 줄인다.
+  if (wasKicked && (kickIndex === 1 || kickIndex === 2)) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  // 무킥 회전(0번)은 구현/경로 추론상 Full 오탐이 잦아 Mini 쪽으로 보수 처리한다.
+  // Full Single을 일부 포기하더라도 Mini->Single 오판을 줄이는 것이 우선이다.
+  if (!wasKicked && kickIndex === 0) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  // 그 외는 front corner 우선 규칙
+  const isMini = frontOccupied < 2;
+  return { isTSpin: true, isMini };
 }
 
 

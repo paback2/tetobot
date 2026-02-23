@@ -74,14 +74,9 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: false };
   }
 
-  // 라인을 2줄 이상 지운 T-Spin은 Full로 본다 (가이드라인 실전 룰에 맞춤)
-  if (cleared >= 2) {
-    return { isTSpin: true, isMini: false };
-  }
-
   // 기본 front-corner 규칙을 우선 적용한다.
   // 앞쪽 두 코너가 모두 차 있으면 Full, 아니면 Mini.
-  // (SRS test-5와 2줄 이상 클리어는 위에서 Full로 강제 처리)
+  // (SRS test-5는 위에서 Full로 강제 처리)
   return { isTSpin: true, isMini: frontOccupied < 2 };
 }
 

@@ -86,16 +86,20 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: false };
   }
 
-  // Mini는 1줄(또는 0줄) 상황에서만 허용하고,
-  // 2줄 이상 클리어는 Full T-Spin으로 처리한다.
+  // Mini/Full 분기 (실전 오분류 보정):
+  // - 2줄 이상 클리어는 Full
+  // - 1줄 클리어는 무킥일 때 Mini 우선
+  // - 그 외는 front-corner 기준
   if (cleared >= 2) {
     return { isTSpin: true, isMini: false };
   }
 
-  // 기본 front-corner 규칙을 우선 적용한다.
-  // 앞쪽 두 코너가 모두 차 있으면 Full, 아니면 Mini.
-  // (SRS test-5는 위에서 Full로 강제 처리)
-  return { isTSpin: true, isMini: frontOccupied < 2 };
+  if (cleared === 1 && !wasKicked) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  const isMini = frontOccupied < 2;
+  return { isTSpin: true, isMini };
 }
 
 

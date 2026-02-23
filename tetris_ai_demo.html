@@ -264,8 +264,16 @@ function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = f
         return { isTSpin: false, isMini: false };
     }
 
-    const isMini = !(frontA && frontB);
-    return { isTSpin: true, isMini };
+    if (kickIndex === 3 || kickIndex === 4) {
+        return { isTSpin: true, isMini: false };
+    }
+
+    const miniByCorners = !(frontA && frontB);
+    if (miniByCorners && (kickIndex === 1 || kickIndex === 2)) {
+        return { isTSpin: true, isMini: true };
+    }
+
+    return { isTSpin: true, isMini: false };
 }
 function getTSpinAction(isTSpin, isMini, cleared) {
     if (!isTSpin) return 'none';

@@ -83,10 +83,20 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
+  // kick 인덱스 기반 보정 (Cobra 계열 동작 근사):
+  // - mini는 주로 1/2번 킥에서 성립
+  // - 3/4번 킥은 Full 우선
+  if (kickIndex === 3 || kickIndex === 4) {
+    return { isTSpin: true, isMini: false };
+  }
+
   // front 2코너가 모두 막히면 Full, 아니면 Mini
-  const isMini = !(frontA && frontB);
-  if (isMini) return { isTSpin: true, isMini: true };
-  // 나머지는 모두 Full
+  const miniByCorners = !(frontA && frontB);
+  if (miniByCorners && (kickIndex === 1 || kickIndex === 2)) {
+    return { isTSpin: true, isMini: true };
+  }
+
+  // 나머지는 Full 처리
   return { isTSpin: true, isMini: false };
 }
 
@@ -164,10 +174,10 @@ export function findTSpinCandidates(board, allMoves) {
   const candidates = [];
 
   for (const move of allMoves) {
-    const { rotation, row, col, kicked } = move;
+    const { rotation, row, col, wasKicked = false, wasRotated = false, kickIndex = 0 } = move;
     
     // T-Spin 확인
-    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, kicked, true, move.kickIndex || 0);
+    const { isTSpin, isMini } = checkTSpin(board, row, col, rotation, wasKicked, wasRotated, kickIndex);
     
     if (isTSpin) {
       const isFin = detectTSpinFin(board, row, col, rotation);

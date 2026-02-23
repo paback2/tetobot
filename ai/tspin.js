@@ -74,6 +74,11 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: true, isMini: false };
   }
 
+  // Mini는 1줄(또는 0줄) 상황에서만 허용하고,
+  // 2줄 이상 클리어는 Full T-Spin으로 처리한다.
+  if (cleared >= 2) {
+    return { isTSpin: true, isMini: false };
+  }
 
   // 기본 front-corner 규칙을 우선 적용한다.
   // 앞쪽 두 코너가 모두 차 있으면 Full, 아니면 Mini.
@@ -97,7 +102,7 @@ export function getTSpinAction(isTSpin, isMini, cleared) {
     switch (cleared) {
       case 0: return 'tsmzero';  // Mini 0-clear
       case 1: return 'tsm';       // Mini Single
-      case 2: return 'tsm_double'; // Mini Double (Full 취급)
+      case 2: return 'tsd';       // Mini Double은 별도 분류하지 않고 Full Double로 처리
       default: return 'tsm';
     }
   }

@@ -79,7 +79,7 @@ const ACTION_SCORES = {
   tsmzero: 80,
   tszero: 180,
   tsm: 550,
-  tsm_double: 1800,
+  tsm_double: 4200, // legacy alias: treat as full double
   tss: 1100,
   tsd: 4200,
   tst: 4700,
@@ -150,9 +150,9 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   score += ACTION_SCORES[lastAction] ?? 0;
   // Perfect Clear 보너스 (매우 높음)
   if (lastAction.includes("_pc") || lastAction === "pc") {
-    score += 20000;  // 매우 높은 점수
-    if (lastAction === "tsd_pc") score += 10000;  // TSD + PC 조합
-    if (lastAction === "tst_pc") score += 8000;   // TST + PC 조합
+    score += 4500;
+    if (lastAction === "tsd_pc") score += 1800;
+    if (lastAction === "tst_pc") score += 1400;
   }
 
   // B2B 보너스
@@ -167,13 +167,13 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
     // 안전 모드: PC 탐색 + T-Spin 극대화
     if (lastAction === "tsd") score += 1600;
     if (lastAction === "tst") score += 700;
-    if (lastAction.includes("_pc") || lastAction === "pc") score += 4000;
+    if (lastAction.includes("_pc") || lastAction === "pc") score += 900;
   }
 
   if (mode === "cheese") {
     // 치즈 모드: 콤보 + 멀티플라이어 테트리스
     if (lastAction === "tetris" || lastAction === "tetris_pc") score += 3000;
-    if (lastAction.includes("_pc")) score += 3000;  // PC도 중요
+    if (lastAction.includes("_pc")) score += 900;
     if (lastAction === "single" || lastAction === "double" || lastAction === "triple") {
       score += 500; // 생존을 위한 예외 — 페널티 없음
     }

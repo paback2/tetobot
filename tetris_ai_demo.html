@@ -229,51 +229,38 @@ function checkTSpin(board, row, col, rotation, wasKicked = false, wasRotated = f
     if (!wasRotated || !wasKicked) {
         return { isTSpin: false, isMini: false };
     }
-    
-    // 보드 가장자리(왼쪽/오른쪽): 벽에 flush되고 킥이 없으면 T-Spin 불가
-    if ((col <= 0 || col >= 8) && !wasKicked && kickIndex === 0) {
-        return { isTSpin: false, isMini: false };
-    }
-    
-    // 4개 대각선 코너 확인
+
+    const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
+
+    // 3-corner rule
     const corners = [
         [row - 1, col - 1], [row - 1, col + 1],
         [row + 1, col - 1], [row + 1, col + 1]
     ];
-    
-    const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
     const filledCorners = corners.filter(([r, c]) => isFilled(r, c)).length;
-    
     if (filledCorners < 3) {
         return { isTSpin: false, isMini: false };
     }
-    
-    // mini 코너(회전 방향 기준 앞쪽 2개)
-    let miniCorners = [];
-    if (rotation === 0) {  // North
-        miniCorners = [[row + 1, col - 1], [row + 1, col + 1]];
-    } else if (rotation === 1) {  // East
-        miniCorners = [[row - 1, col + 1], [row + 1, col + 1]];
-    } else if (rotation === 2) {  // South
-        miniCorners = [[row - 1, col - 1], [row - 1, col + 1]];
-    } else if (rotation === 3) {  // West
-        miniCorners = [[row - 1, col - 1], [row + 1, col - 1]];
-    }
-    
-    const filledMiniCorners = miniCorners.filter(([r, c]) => isFilled(r, c)).length;
-    
-    // mini/full 구분: cold-clear-2 스타일
-    // 4번째 킥(특수 SRS)은 무조건 Full
+
+    // 특수 5번째 킥은 Full
     if (kickIndex === 4) {
         return { isTSpin: true, isMini: false };
     }
-    
-    // SRS 미니 킥(1, 2번)만 mini 허용, 그 외는 Full
-    if ((kickIndex === 1 || kickIndex === 2) && filledMiniCorners === 2) {
-        return { isTSpin: true, isMini: true };
-    }
-    
-    return { isTSpin: true, isMini: false };
+
+    const tl = isFilled(row - 1, col - 1);
+    const tr = isFilled(row - 1, col + 1);
+    const bl = isFilled(row + 1, col - 1);
+    const br = isFilled(row + 1, col + 1);
+
+    // T가 바라보는 방향(front) 코너 2개
+    let frontA = false, frontB = false;
+    if (rotation === 0) { frontA = tl; frontB = tr; }
+    else if (rotation === 1) { frontA = tr; frontB = br; }
+    else if (rotation === 2) { frontA = bl; frontB = br; }
+    else { frontA = tl; frontB = bl; }
+
+    const isMini = !(frontA && frontB);
+    return { isTSpin: true, isMini };
 }
 function getTSpinAction(isTSpin, isMini, cleared) {
     if (!isTSpin) return 'none';

@@ -1,7 +1,7 @@
 import { PIECES } from '../game/pieces.js';
 import { canPlace, placePiece, clearLines, dropRowOn } from '../game/board.js';
 import { evaluateBoard } from './scoring.js';
-import { checkTSpin, getTSpinAction } from './tspin.js';
+import { checkTSpin, getTSpinAction, getTPivotFromPlacement } from './tspin.js';
 import { attemptRotation } from '../game/rotation.js';
 
 // ============================================================
@@ -32,7 +32,7 @@ function getDynamicSearchConfig(pieceCount) {
 
 function actionPriorityBoost(action) {
   if (!action) return 0;
-  if (action === 'pc' || action.includes('_pc')) return 120000;
+  if (action === 'pc' || action.includes('_pc')) return 16000;
   if (action === 'tsd' || action === 'tsd_pc') return 18000;
   if (action === 'tst' || action === 'tst_pc') return 14000;
   if (action === 'tss' || action === 'tss_pc') return 7000;
@@ -63,20 +63,8 @@ function findAllMovePositions(board, pieceType) {
 
   if (pieceType === 'T') {
     const addOrReplaceMove = (move) => {
-      const key = `${move.rotation}-${move.col}-${move.row}`;
-      const existingIndex = allMoves.findIndex(
-        (existing) => existing.rotation === move.rotation && existing.col === move.col && existing.row === move.row
-      );
-
-      // 동일 최종 배치가 회전/비회전 둘 다 가능한 경우,
-      // 마지막 입력이 회전이라는 보장이 없는 경로를 우선해 T-Spin 오탐을 방지한다.
-      if (existingIndex !== -1) {
-        if (!move.wasRotated && allMoves[existingIndex].wasRotated) {
-          allMoves[existingIndex] = move;
-        }
-        return;
-      }
-
+      const key = `${move.rotation}-${move.col}-${move.row}-${move.wasRotated ? 1 : 0}-${move.kickIndex || 0}`;
+      if (seen.has(key)) return;
       seen.add(key);
       allMoves.push(move);
     };
@@ -89,21 +77,28 @@ function findAllMovePositions(board, pieceType) {
         if (dropRow === -1) continue;
 
         // 각 회전 방향으로 SRS 킥 시도
-        for (let toRot = 0; toRot < 4; toRot++) {
-          if (toRot === fromRot) continue;
-          const nextPiece = rotations[toRot];
-          const rotResult = attemptRotation(board, piece, nextPiece, dropRow, col, 'T', fromRot, toRot);
-          if (!rotResult) continue;
+        // drop 직전/직후 높이에서도 회전을 시도해 T-Spin 진입 경로를 보존한다.
+        const rotationRows = new Set([dropRow, dropRow - 1, dropRow - 2]);
+        for (const rotateRow of rotationRows) {
+          if (rotateRow < 0 || !canPlace(board, piece, rotateRow, col)) continue;
 
-          addOrReplaceMove({
-            rotation: toRot,
-            row: rotResult.row,
-            col: rotResult.col,
-            piece: nextPiece,
-            wasRotated: true,
-            wasKicked: rotResult.kicked,
-            kickIndex: rotResult.kickIndex,
-          });
+          for (let toRot = 0; toRot < 4; toRot++) {
+            if (toRot === fromRot) continue;
+            const nextPiece = rotations[toRot];
+            const rotResult = attemptRotation(board, piece, nextPiece, rotateRow, col, 'T', fromRot, toRot);
+            if (!rotResult) continue;
+            if (canPlace(board, nextPiece, rotResult.row + 1, rotResult.col)) continue;
+
+            addOrReplaceMove({
+              rotation: toRot,
+              row: rotResult.row,
+              col: rotResult.col,
+              piece: nextPiece,
+              wasRotated: true,
+              wasKicked: rotResult.kicked,
+              kickIndex: rotResult.kickIndex,
+            });
+          }
         }
 
         // 회전 없이 그냥 놓는 경우도 추가
@@ -164,22 +159,8 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
 
     // T-Spin 감지 (반드시 회전+킥이 발생한 경우만, 줄을 지운 경우만)
     if (pieceType === 'T' && cleared > 0 && wasRotated) {
-      // cold-clear-2/cobra-tetrio-movegen 방식: 회전 상태별 중심 좌표 정확 계산
-      let centerR, centerC;
-      switch (rotation) {
-        case 1:
-          centerR = row + 1;
-          centerC = col;
-          break;
-        case 3:
-          centerR = row + 1;
-          centerC = col + 1;
-          break;
-        case 0:
-        default:
-          centerR = row + 1;
-          centerC = col + 1;
-      }
+      // 회전 상태별 trim 보정 피벗 좌표
+      const { centerR, centerC } = getTPivotFromPlacement(row, col, rotation);
 
       const tspinResult = checkTSpin(
         boardWithPiece,
@@ -228,7 +209,7 @@ function evaluatePieceMovements(board, pieceType, isB2B, mode, isDeepSearch = fa
     const totalScore = baseScore + bonusScore;
 
     // Perfect Clear 발견 시 극도로 높은 보상
-    const pcBoost = isPerfectClear(clearedBoard) ? 100000 : 0;
+    const pcBoost = isPerfectClear(clearedBoard) ? 8000 : 0;
 
     scoredMoves.push({
       move,
@@ -274,7 +255,8 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
 
   // Memoization 확인
   const boardKey = boardToKey(board);
-  const cacheKey = `${boardKey}:${currentPiece}:${depth}:${isB2B}`;
+  const queueKey = pieces.join(',');
+  const cacheKey = `${boardKey}:${queueKey}:${depth}:${isB2B}`;
   
   if (evalCache.has(cacheKey)) {
     return evalCache.get(cacheKey);
@@ -315,7 +297,7 @@ function deepBeamSearch(board, pieces, isB2B, mode, depth = 0, maxDepth = BASE_L
     // Perfect Clear를 찾으면 즉시 반환
     if (candidate.isPerfectClear) {
       const result = {
-        score: candidate.score + 1000000,  // 극도로 높은 점수
+        score: candidate.score + 60000,  // PC 우선은 유지하되 과도한 편향 완화
         move: candidate.move,
         action: candidate.action,
         isPerfectClear: true

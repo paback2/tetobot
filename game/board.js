@@ -33,6 +33,51 @@ export function getBumpiness(heights) {
   return bumpiness;
 }
 
+// 행 전환 계산
+export function getRowTransitions(board) {
+  let transitions = 0;
+  for (let row = 0; row < 20; row++) {
+    // Left wall transition (empty cell at the edge)
+    if (board[row][0] === 0) {
+      transitions++;
+    }
+    // Internal transitions
+    for (let col = 0; col < 9; col++) {
+      if ((board[row][col] === 0) !== (board[row][col + 1] === 0)) {
+        transitions++;
+      }
+    }
+    // Right wall transition (empty cell at the edge)
+    if (board[row][9] === 0) {
+      transitions++;
+    }
+  }
+  return transitions;
+}
+
+// 덮인 셀 계산
+export function getCellCoveredness(board, max_cell_covered_height = 20) {
+  let coveredness = 0;
+  const heights = getColumnHeights(board);
+  for (let col = 0; col < 10; col++) {
+    const height = heights[col];
+    if (height === 0) continue;
+    let holes = 0;
+    for (let row = 19; row > 19 - height; row--) {
+      if (board[row][col] === 0) {
+        let cellsAbove = 0;
+        for (let r = row - 1; r > 19 - height; r--) {
+          if (board[r][col] !== 0) {
+            cellsAbove++;
+          }
+        }
+        coveredness += Math.min(cellsAbove, max_cell_covered_height);
+      }
+    }
+  }
+  return coveredness;
+}
+
 /**
  * 각 열의 우물 깊이 계산 (I-피스 배치 가능성)
  * @param {number[]} heights - 열별 높이

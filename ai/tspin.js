@@ -21,8 +21,8 @@ export function getTPivotFromPlacement(row, col, rotation) {
 }
 
 /**
- * Tetris Guideline T-Spin 감지
- * 3-Corner Rule과 Kick 정보를 사용하여 T-Spin 판별
+ * Tetris Guideline T-Spin 감지 (개선된 구현)
+ * Cold Clear 2와 Cobra Movegen을 기반으로 한 정확한 3-Corner Rule 구현
  *
  * @param {number[][]} board - 피스 배치 전 보드
  * @param {number} row - T-피스 배치 행
@@ -30,6 +30,8 @@ export function getTPivotFromPlacement(row, col, rotation) {
  * @param {number} rotation - T-피스 회전 상태 (0-3)
  * @param {boolean} wasKicked - 이 배치가 킥된 회전 결과인지 여부
  * @param {boolean} wasRotated - 마지막 동작이 회전인지 여부
+ * @param {number} kickIndex - SRS 킥 시도 번호 (0-4, 4는 test-5)
+ * @param {number} cleared - 클리어된 라인 수
  * @param {boolean} debug - 디버그 모드 (로깅 활성화)
  * @returns {{isTSpin: boolean, isMini: boolean}} T-Spin 여부 및 미니 여부
  */
@@ -40,74 +42,93 @@ export function checkTSpin(board, row, col, rotation, wasKicked = false, wasRota
     return { isTSpin: false, isMini: false };
   }
 
-  const isFilled = (r, c) => r < 0 || r >= 20 || c < 0 || c >= 10 || board[r][c] !== 0;
-
-  const corners = {
-    tl: isFilled(row - 1, col - 1),
-    tr: isFilled(row - 1, col + 1),
-    bl: isFilled(row + 1, col - 1),
-    br: isFilled(row + 1, col + 1),
+  // 보드 경계와 채워진 셀 확인
+  const isFilled = (r, c) => {
+    if (r < 0 || r >= 20 || c < 0 || c >= 10) return true;
+    return board[r][c] !== 0;
   };
 
-  const occupied = [corners.tl, corners.tr, corners.bl, corners.br].filter(Boolean).length;
-  if (occupied < 3) {
-    if (debug) console.log('[T-Spin] Less than 3 occupied corners');
+  // 4개 코너 확인
+  const corners = [
+    isFilled(row - 1, col - 1), // top-left
+    isFilled(row - 1, col + 1), // top-right
+    isFilled(row + 1, col - 1), // bottom-left
+    isFilled(row + 1, col + 1), // bottom-right
+  ];
+
+  const occupiedCorners = corners.filter(Boolean).length;
+  
+  // 3-Corner Rule: 최소 3개 코너가 채워져 있어야 함
+  if (occupiedCorners < 3) {
+    if (debug) console.log(`[T-Spin] Only ${occupiedCorners} corners occupied (need 3+)`);
     return { isTSpin: false, isMini: false };
   }
 
-  const cardinal = [[-1,0],[1,0],[0,-1],[0,1]];
-  let blockedCardinal = 0;
-  for (const [dr, dc] of cardinal) {
-    if (isFilled(row + dr, col + dc)) blockedCardinal++;
-  }
-
-  // cobra/cold-clear 계열 movegen과 유사하게, 킥 회전이 아니면 완전 immobile일 때만 스핀으로 인정
-  if (!wasKicked && blockedCardinal < 4) {
-    if (debug) console.log('[T-Spin] Non-kick rotation was not fully immobile');
-    return { isTSpin: false, isMini: false };
-  }
-
-  const frontByRotation = {
-    0: [corners.tl, corners.tr],
-    1: [corners.tr, corners.br],
-    2: [corners.bl, corners.br],
-    3: [corners.tl, corners.bl],
-  };
-  const backByRotation = {
-    0: [corners.bl, corners.br],
-    1: [corners.tl, corners.bl],
-    2: [corners.tl, corners.tr],
-    3: [corners.tr, corners.br],
+  // 회전 상태에 따른 front/back 코너 정의
+  // Front = 회전 방향으로 향하는 방향의 코너들
+  // Back = 반대 방향의 코너들
+  const getFrontBackCorners = (rot) => {
+    switch(rot) {
+      case 0: // North: front = top, back = bottom
+        return { front: [corners[0], corners[1]], back: [corners[2], corners[3]] };
+      case 1: // East: front = right, back = left
+        return { front: [corners[1], corners[3]], back: [corners[0], corners[2]] };
+      case 2: // South: front = bottom, back = top
+        return { front: [corners[2], corners[3]], back: [corners[0], corners[1]] };
+      case 3: // West: front = left, back = right
+        return { front: [corners[0], corners[2]], back: [corners[1], corners[3]] };
+      default: return { front: [], back: [] };
+    }
   };
 
-  const frontOccupied = (frontByRotation[rotation] || frontByRotation[0]).filter(Boolean).length;
-  const backOccupied = (backByRotation[rotation] || backByRotation[0]).filter(Boolean).length;
+  const { front, back } = getFrontBackCorners(rotation);
+  const frontOccupied = front.filter(Boolean).length;
+  const backOccupied = back.filter(Boolean).length;
 
-  // SRS test-5는 Full 처리
+  // SRS test-5 (kickIndex === 4)는 항상 Full T-Spin
   if (kickIndex === 4) {
+    if (debug) console.log('[T-Spin] SRS test-5 detected -> Full T-Spin');
     return { isTSpin: true, isMini: false };
   }
 
-  // 라인 클리어 T-Spin에서 mini 오판 억제:
-  // - Mini는 킥 기반(또는 test-5) 증거가 있을 때만
-  // - 2줄 이상은 Full만 인정
-  const isMiniByCorners = frontOccupied < 2;
+  // 라인 클리어 개수에 따른 처리
+  // 2줄 이상 클리어: Full T-Spin만 인정
   if (cleared >= 2) {
+    const isMiniByCorners = frontOccupied < 2;
     if (isMiniByCorners) {
+      if (debug) console.log('[T-Spin] 2+ lines cleared but front < 2 -> Invalid');
       return { isTSpin: false, isMini: false };
     }
+    if (debug) console.log('[T-Spin] 2+ lines cleared -> Full T-Spin');
     return { isTSpin: true, isMini: false };
   }
 
+  // 1줄 클리어
   if (cleared === 1) {
+    const isMiniByCorners = frontOccupied < 2;
     if (isMiniByCorners) {
-      if (!wasKicked) return { isTSpin: false, isMini: false };
+      // Mini는 킥이 있었을 때만 인정
+      if (!wasKicked) {
+        if (debug) console.log('[T-Spin] 1 line, mini pattern, but no kick -> Invalid');
+        return { isTSpin: false, isMini: false };
+      }
+      if (debug) console.log('[T-Spin] 1 line, mini pattern, with kick -> Mini T-Spin');
       return { isTSpin: true, isMini: true };
     }
+    if (debug) console.log('[T-Spin] 1 line, full pattern -> Full T-Spin');
     return { isTSpin: true, isMini: false };
   }
 
+  // 0줄 클리어 (TSD 0-clear 같은 경우)
+  // Mini: front < 2 AND (kicked OR back < 2)
+  // Full: front >= 2
+  const isMiniByCorners = frontOccupied < 2;
   const isMini = isMiniByCorners && (wasKicked || backOccupied < 2);
+  
+  if (debug) {
+    console.log(`[T-Spin] 0 lines: front=${frontOccupied}, back=${backOccupied}, kicked=${wasKicked} -> ${isMini ? 'Mini' : 'Full'}`);
+  }
+  
   return { isTSpin: true, isMini };
 }
 

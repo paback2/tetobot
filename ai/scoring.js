@@ -17,12 +17,14 @@ function analyzeBoard(board) {
   
   // 깊은 구멍 개수 (3칸 이상 깊이)
   let deepHoles = 0;
+  let maxHoleDepth = 0;
   for (let col = 0; col < 10; col++) {
     const startRow = 20 - heights[col];
     let holeDepth = 0;
     for (let row = startRow; row < 20; row++) {
       if (board[row][col] === 0) {
         holeDepth++;
+        maxHoleDepth = Math.max(maxHoleDepth, holeDepth);
       } else {
         if (holeDepth >= 3) deepHoles++;
         holeDepth = 0;
@@ -55,17 +57,26 @@ function analyzeBoard(board) {
   }
   variance = Math.sqrt(variance / heights.length);
   
+  // 스택 안정성 점수: 높이 차이의 빈도
+  let instability = 0;
+  for (let i = 0; i < heights.length - 1; i++) {
+    const diff = Math.abs(heights[i] - heights[i + 1]);
+    instability += diff * diff; // 큰 높이 차이를 더 강하게 페널티
+  }
+  
   return {
     heights,
     holes,
     deepHoles,
+    maxHoleDepth,
     bumpiness,
     maxHeight,
     minHeight,
     avgHeight,
     nearFullRows,
     wellPotential,
-    variance
+    variance,
+    instability
   };
 }
 
@@ -136,7 +147,8 @@ function getHoleDepthPenalty(board, heights) {
       if (board[row][col] !== 0) {
         cover++;
       } else {
-        penalty += cover;
+        // 깊은 구멍일수록 더 강한 페널티
+        penalty += cover * cover;
       }
     }
   }
@@ -170,51 +182,59 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   const analysis = analyzeBoard(board);
   let score = 0;
   
-  // 모드별 가중치 설정
+  // 모드별 가중치 설정 - 안전성을 더 강조
   const weights = {
     safe: {
-      holes: -120,
-      deepHoles: -200,
-      height: -6,
-      bumpiness: -4,
-      variance: -8,
+      holes: -130,
+      deepHoles: -300,      // 깊은 구멍에 더 큰 페널티
+      maxHoleDepth: -200,   // 최대 구멍 깊이 페널티 추가
+      height: -8,
+      bumpiness: -5,
+      variance: -12,        // 분산 페널티 증가
+      instability: -3,      // 스택 불안정성 페널티
       nearFullRows: 50,
-      colTransitions: -6,
-      rowTransitions: -7,
-      holeDepthPenalty: -20,
+      colTransitions: -8,
+      rowTransitions: -9,
+      holeDepthPenalty: -25,
     },
     cheese: {
-      holes: -150,
-      deepHoles: -250,
-      height: -8,
+      holes: -160,
+      deepHoles: -280,
+      maxHoleDepth: -180,
+      height: -9,
       bumpiness: -2,
-      variance: -5,
+      variance: -8,
+      instability: -2,
       nearFullRows: 100,
-      colTransitions: -4,
-      rowTransitions: -5,
-      holeDepthPenalty: -26,
+      colTransitions: -5,
+      rowTransitions: -6,
+      holeDepthPenalty: -28,
     },
     straight: {
-      holes: -140,
-      deepHoles: -180,
-      height: -7,
+      holes: -150,
+      deepHoles: -250,
+      maxHoleDepth: -190,
+      height: -8,
       bumpiness: -5,
       variance: -10,
+      instability: -2,
       nearFullRows: 80,
       colTransitions: -7,
       rowTransitions: -8,
       holeDepthPenalty: -22,
     },
     danger: {
-      holes: -200,
-      deepHoles: -300,
-      height: -10,
-      bumpiness: -3,
-      variance: -6,
+      holes: -220,
+      deepHoles: -350,
+      maxHoleDepth: -250,
+      height: -12,
+      bumpiness: -4,
+      variance: -8,
+      instability: -4,
       nearFullRows: 150,
-      colTransitions: -5,
-      rowTransitions: -6,
-      holeDepthPenalty: -30,
+      colTransitions: -6,
+      rowTransitions: -7,
+      holeDepthPenalty: -35,
     }
   };
   
@@ -223,9 +243,19 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   // 모드별 최적화된 점수 계산
   score += analysis.holes * w.holes;
   score += analysis.deepHoles * w.deepHoles;
+  
+  if (analysis.maxHoleDepth && w.maxHoleDepth) {
+    score += analysis.maxHoleDepth * w.maxHoleDepth;
+  }
+  
   score += analysis.maxHeight * w.height;
   score += analysis.bumpiness * w.bumpiness;
   score += analysis.variance * w.variance;
+  
+  if (analysis.instability && w.instability) {
+    score += analysis.instability * w.instability;
+  }
+  
   score += analysis.nearFullRows * w.nearFullRows;
 
   const colTransitions = getColumnTransitions(board);
@@ -237,6 +267,21 @@ export function evaluateBoard(board, lastAction, isB2B, b2bCount, mode) {
   
   // 우물 잠재력 보너스 (높음 = 좋음)
   score += analysis.wellPotential * 2;
+  
+  // 최대 높이가 너무 높으면 극강한 페널티 (16 이상)
+  if (analysis.maxHeight > 16) {
+    score -= Math.pow(analysis.maxHeight - 16, 2) * 15;
+  }
+  
+  // 구멍이 많으면 추가 페널티
+  if (analysis.holes > 4) {
+    score -= Math.pow(analysis.holes - 4, 2) * 20;
+  }
+  
+  // 깊은 구멍이 매우 깊으면 추가 페널티
+  if (analysis.maxHoleDepth > 4) {
+    score -= Math.pow(analysis.maxHoleDepth - 4, 2) * 30;
+  }
 
   // 액션별 점수 (Cold Clear 계열처럼 액션 보상과 보드 페널티를 분리)
   score += ACTION_SCORES[lastAction] ?? 0;
